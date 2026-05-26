@@ -1,4 +1,4 @@
-// reports_generate.go implements "finops report generate".
+// report_generate.go implements "finops report generate".
 package cmd
 
 import (
@@ -10,21 +10,21 @@ import (
 	"github.com/openshift-online/finops-tools/cli/internal/configstore"
 	"github.com/openshift-online/finops-tools/cli/internal/progress"
 	reportpkg "github.com/openshift-online/finops-tools/cli/internal/report"
-	corereport "github.com/openshift-online/finops-tools/core/report"
 	"github.com/openshift-online/finops-tools/core/cost"
+	corereport "github.com/openshift-online/finops-tools/core/report"
 	"github.com/spf13/cobra"
 )
 
 var (
-	reportsGenerateAccount         string
-	reportsGenerateAccountAliases  string
-	reportsGenerateFormat          string
-	reportsGenerateOutput          string
-	reportsGeneratePayer           string
-	reportsGenerateQuiet           bool
+	reportGenerateAccount        string
+	reportGenerateAccountAliases string
+	reportGenerateFormat         string
+	reportGenerateOutput         string
+	reportGeneratePayer          string
+	reportGenerateQuiet          bool
 )
 
-var reportsGenerateCmd = &cobra.Command{
+var reportGenerateCmd = &cobra.Command{
 	Use:   "generate [template]",
 	Short: "Generate a report from a template",
 	Long: `Generate a report for configured cloud accounts.
@@ -36,39 +36,39 @@ Example:
   finops report generate costs --account 710019948333 --payer rhc -o member.html`,
 	Args: cobra.ExactArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		if strings.TrimSpace(reportsGenerateAccount) == "" && strings.TrimSpace(reportsGenerateAccountAliases) == "" {
+		if strings.TrimSpace(reportGenerateAccount) == "" && strings.TrimSpace(reportGenerateAccountAliases) == "" {
 			return fmt.Errorf("at least one of --account or --account-alias is required")
 		}
 		if _, err := reportpkg.ParseTemplate(args[0]); err != nil {
 			return err
 		}
-		if _, err := reportpkg.ParseFormat(reportsGenerateFormat); err != nil {
+		if _, err := reportpkg.ParseFormat(reportGenerateFormat); err != nil {
 			return err
 		}
-		if strings.TrimSpace(reportsGeneratePayer) != "" && strings.TrimSpace(reportsGenerateAccount) == "" {
+		if strings.TrimSpace(reportGeneratePayer) != "" && strings.TrimSpace(reportGenerateAccount) == "" {
 			return fmt.Errorf("--payer requires --account")
 		}
 		return nil
 	},
-	RunE: runReportsGenerate,
+	RunE: runReportGenerate,
 }
 
 func init() {
-	reportCmd.AddCommand(reportsGenerateCmd)
-	reportsGenerateCmd.Flags().StringVar(&reportsGenerateFormat, "format", reportpkg.FormatHTML, "Output format (supported: html)")
-	reportsGenerateCmd.Flags().StringVar(&reportsGenerateAccount, "account", "", "Payer AWS account ID(s), comma-separated 12-digit IDs")
-	reportsGenerateCmd.Flags().StringVar(&reportsGenerateAccountAliases, "account-alias", "", "Configured account alias(es), comma-separated (e.g. rh-control)")
-	reportsGenerateCmd.Flags().StringVar(&reportsGeneratePayer, "payer", "", "Registered payer alias for --account member IDs not in config (e.g. rhc)")
-	reportsGenerateCmd.Flags().StringVarP(&reportsGenerateOutput, "output", "o", "", "Write HTML to this file instead of stdout")
-	reportsGenerateCmd.Flags().BoolVar(&reportsGenerateQuiet, "quiet", false, "Suppress progress messages on stderr")
+	reportCmd.AddCommand(reportGenerateCmd)
+	reportGenerateCmd.Flags().StringVar(&reportGenerateFormat, "format", reportpkg.FormatHTML, "Output format (supported: html)")
+	reportGenerateCmd.Flags().StringVar(&reportGenerateAccount, "account", "", "Payer AWS account ID(s), comma-separated 12-digit IDs")
+	reportGenerateCmd.Flags().StringVar(&reportGenerateAccountAliases, "account-alias", "", "Configured account alias(es), comma-separated (e.g. rh-control)")
+	reportGenerateCmd.Flags().StringVar(&reportGeneratePayer, "payer", "", "Registered payer alias for --account member IDs not in config (e.g. rhc)")
+	reportGenerateCmd.Flags().StringVarP(&reportGenerateOutput, "output", "o", "", "Write HTML to this file instead of stdout")
+	reportGenerateCmd.Flags().BoolVar(&reportGenerateQuiet, "quiet", false, "Suppress progress messages on stderr")
 }
 
-func runReportsGenerate(cmd *cobra.Command, args []string) error {
+func runReportGenerate(cmd *cobra.Command, args []string) error {
 	templateName, err := reportpkg.ParseTemplate(args[0])
 	if err != nil {
 		return err
 	}
-	format, err := reportpkg.ParseFormat(reportsGenerateFormat)
+	format, err := reportpkg.ParseFormat(reportGenerateFormat)
 	if err != nil {
 		return err
 	}
@@ -83,25 +83,25 @@ func runReportsGenerate(cmd *cobra.Command, args []string) error {
 	}
 
 	var accountIDs, aliases []string
-	if strings.TrimSpace(reportsGenerateAccount) != "" {
-		accountIDs, err = configstore.ParseAWSAccountIDs(reportsGenerateAccount)
+	if strings.TrimSpace(reportGenerateAccount) != "" {
+		accountIDs, err = configstore.ParseAWSAccountIDs(reportGenerateAccount)
 		if err != nil {
 			return err
 		}
 	}
-	if strings.TrimSpace(reportsGenerateAccountAliases) != "" {
-		aliases, err = configstore.ParseAccountAliases(reportsGenerateAccountAliases)
+	if strings.TrimSpace(reportGenerateAccountAliases) != "" {
+		aliases, err = configstore.ParseAccountAliases(reportGenerateAccountAliases)
 		if err != nil {
 			return err
 		}
 	}
 
-	targets, err := configstore.ResolveCostTargets(cfg, accountIDs, aliases, reportsGeneratePayer)
+	targets, err := configstore.ResolveCostTargets(cfg, accountIDs, aliases, reportGeneratePayer)
 	if err != nil {
 		return err
 	}
 
-	status := progress.New(cmd.ErrOrStderr(), reportsGenerateQuiet)
+	status := progress.New(cmd.ErrOrStderr(), reportGenerateQuiet)
 
 	status.Step("Ensuring AWS credentials…")
 	if err := ensureCostCredentials(cmd.Context(), cmd, cfg, targets, awsFlags.ConfigPath, awsFlags.CredentialsFile, awsFlags.AuthMethod); err != nil {
@@ -123,7 +123,7 @@ func runReportsGenerate(cmd *cobra.Command, args []string) error {
 	}
 
 	var out *os.File
-	if path := strings.TrimSpace(reportsGenerateOutput); path != "" {
+	if path := strings.TrimSpace(reportGenerateOutput); path != "" {
 		f, err := os.Create(path)
 		if err != nil {
 			return fmt.Errorf("create output file: %w", err)
@@ -147,8 +147,8 @@ func runReportsGenerate(cmd *cobra.Command, args []string) error {
 		if err := reportpkg.RenderCostsHTML(out, report); err != nil {
 			return err
 		}
-		if !reportsGenerateQuiet {
-			if path := strings.TrimSpace(reportsGenerateOutput); path != "" {
+		if !reportGenerateQuiet {
+			if path := strings.TrimSpace(reportGenerateOutput); path != "" {
 				status.Step(fmt.Sprintf("Wrote report to %s", path))
 			} else {
 				status.Step("Report written to stdout")

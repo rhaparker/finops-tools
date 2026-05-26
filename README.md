@@ -12,6 +12,21 @@ FinOps command-line tools. The repository is a Go monorepo with a shared **core*
 
 A future REST API can live in a separate module and import the same `core` package.
 
+### Package map (`cli/internal`)
+
+| Package | Role |
+|---------|------|
+| `cmd/` | Cobra wiring only: `<noun>.go` + `<noun>_<verb>.go` (e.g. `report_generate.go`) |
+| `output/` | Human-readable tables and `--format` handlers |
+| `format/` | Currency formatting for CLI output |
+| `configstore/` | FinOps YAML config read/write |
+| `account/` | Account login flows (`account add` business logic; not the `cmd` noun files) |
+| `aws/`, `awsauth/`, `awslogin/`, `awsrole/` | Credentials, auth orchestration, SAML, role ARNs |
+| `report/` | HTML templates and charts (distinct from `core/report` data assembly) |
+| `progress/` | Progress lines on stderr |
+
+`core/` grows by domain noun (`core/cost`, `core/report`), not by CLI verb. Shared target/credential orchestration stays in `cli/` until a third command needs it; see `.cursor/rules/cli-commands.mdc` for when to split `cmd/` into per-noun subpackages.
+
 ## CLI commands
 
 Every command uses **`finops <noun> <verb>`** (e.g. `finops account add`, `finops demo hello`). See `.cursor/rules/cli-commands.mdc` for conventions when adding commands.

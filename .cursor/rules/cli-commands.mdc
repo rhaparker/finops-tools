@@ -52,3 +52,14 @@ Groups are defined on `rootCmd` in `cli/internal/cmd/root.go` via `AddGroup`. Ev
 
 - Nouns and verbs are lowercase single words (kebab-case only if the domain name requires it).
 - Prefer a dedicated verb command over a mode flag when behavior differs (e.g. `account add` vs a shared `login --check`).
+- Command source files use the noun prefix: `report_generate.go` for `finops report generate`, not `reports_generate.go`.
+
+## Scaling `cmd/`
+
+Keep a flat `package cmd` until one of these triggers:
+
+- More than ~40–50 non-test files under `cli/internal/cmd/`, or
+- Several verb files per noun exceed ~300 lines each, or
+- Import cycles force shared logic out of `cmd`.
+
+Then split into per-noun subpackages (`cli/internal/cmd/account/`, `cost/`, …), each exporting `NewCmd() *cobra.Command`, registered from `root.go`.
