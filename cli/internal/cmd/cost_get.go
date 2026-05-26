@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/openshift-online/finops-tools/cli/internal/awsauth"
 	awsconfig "github.com/openshift-online/finops-tools/cli/internal/aws"
 	"github.com/openshift-online/finops-tools/cli/internal/configstore"
 	"github.com/openshift-online/finops-tools/cli/internal/output"
@@ -16,12 +15,9 @@ import (
 var (
 	costGetAccount           string
 	costGetAccountAliases    string
-	costGetAuthMethod        string
-	costGetConfigPath        string
-	costGetFormat            string
-	costGetProvider          string
-	costGetSplitBy           string
-	costGetCredentialsFile   string
+	costGetFormat          string
+	costGetProvider        string
+	costGetSplitBy         string
 )
 
 var costGetCmd = &cobra.Command{
@@ -58,16 +54,12 @@ func init() {
 	costCmd.AddCommand(costGetCmd)
 	costGetCmd.Flags().StringVar(&costGetAccount, "account", "", "Payer AWS account ID(s), comma-separated 12-digit IDs")
 	costGetCmd.Flags().StringVar(&costGetAccountAliases, "account-alias", "", "Configured account alias(es), comma-separated (e.g. rh-control)")
-	costGetCmd.Flags().StringVar(&costGetAuthMethod, "auth-method", string(awsauth.MethodSAML), "AWS authentication method: saml or profile (overrides config default when set)")
-	costGetCmd.Flags().StringVar(&costGetConfigPath, "config", "", "Path to finops config file (default: OS-specific config dir)")
 	costGetCmd.Flags().StringVar(&costGetFormat, "format", string(output.FormatPrettyPrint),
 		"Output format: pretty-print, json, csv")
 	costGetCmd.Flags().StringVar(&costGetProvider, "provider", string(cost.ProviderAWS),
 		"Cloud provider: aws or gcp")
 	costGetCmd.Flags().StringVar(&costGetSplitBy, "split-by", "",
 		"Split results by dimension (supported: service, account)")
-	costGetCmd.Flags().StringVar(&costGetCredentialsFile, "credentials-file", "",
-		"Path to AWS credentials file (default: ~/.aws/credentials)")
 }
 
 func runCostGet(cmd *cobra.Command, _ []string) error {
@@ -84,7 +76,7 @@ func runCostGet(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	cfgPath, err := configstore.ResolvePath(costGetConfigPath)
+	cfgPath, err := configstore.ResolvePath(awsFlags.ConfigPath)
 	if err != nil {
 		return err
 	}
@@ -113,10 +105,10 @@ func runCostGet(cmd *cobra.Command, _ []string) error {
 	}
 
 	if provider == cost.ProviderAWS {
-		if err := ensureCostCredentials(cmd.Context(), cmd, cfg, targets, costGetConfigPath, costGetCredentialsFile, costGetAuthMethod); err != nil {
+		if err := ensureCostCredentials(cmd.Context(), cmd, cfg, targets, awsFlags.ConfigPath, awsFlags.CredentialsFile, awsFlags.AuthMethod); err != nil {
 			return err
 		}
-		targets, err = prepareCostTargets(cmd.Context(), cfg, targets, costGetCredentialsFile)
+		targets, err = prepareCostTargets(cmd.Context(), cfg, targets, awsFlags.CredentialsFile)
 		if err != nil {
 			return err
 		}
@@ -130,7 +122,7 @@ func runCostGet(cmd *cobra.Command, _ []string) error {
 	}
 	if provider == cost.ProviderAWS && splitBy == cost.SplitByAccount {
 		costQuery.AWSFetch = &cost.AWSFetchOptions{
-			ListAccountNames: awsconfig.ListAccountNames,
+			ResolveAccountNames: awsconfig.ResolveAccountNames,
 		}
 	}
 

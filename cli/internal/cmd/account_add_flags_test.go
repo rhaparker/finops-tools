@@ -17,10 +17,10 @@ func TestAccountAddPreRunLinkedWithPayerOnly(t *testing.T) {
 
 	accountAddPayer = "rh-control"
 	accountAddRole = ""
-	accountAddConfigPath = path
+	awsFlags.ConfigPath = path
 	err := accountAddCmd.PreRunE(accountAddCmd, []string{"aws", "111111111111"})
 	accountAddPayer = ""
-	accountAddConfigPath = ""
+	awsFlags.ConfigPath = ""
 	if err != nil {
 		t.Fatalf("got %v", err)
 	}

@@ -1,0 +1,43 @@
+---
+description: Format dollar amounts with thousands separators for display
+alwaysApply: true
+---
+
+# Dollar amount formatting
+
+All **human-readable** dollar amounts must use thousands separators (comma every three digits).
+
+## Shared helper
+
+Use `github.com/openshift-online/finops-tools/cli/internal/format`:
+
+| Function | Use case | Example |
+|----------|----------|---------|
+| `FormatAmount(amount)` | Numeric part only, 2 decimals | `12,345,678.90` |
+| `FormatMoney(amount, currency)` | CLI tables, HTML reports | `USD 1,234.50` |
+| `FormatChartMoney(amount, currency)` | Chart axis labels (whole numbers when ≥ 1000) | `USD 7,927` |
+
+Do not duplicate comma-insertion logic in commands, `output/`, or `report/`.
+
+## When to apply
+
+- Pretty-print CLI output (`cli/internal/output/`)
+- HTML reports and embedded SVG charts (`cli/internal/report/`)
+- Any new user-facing cost or currency strings
+
+## When not to apply
+
+- JSON, CSV, and API payloads: keep raw `float64` / full-precision strings
+- Internal calculations and AWS API values
+
+## Examples
+
+```go
+// ✅ GOOD
+totalLine := fmt.Sprintf("%s %s", r.Currency, format.FormatAmount(r.Amount))
+view.TotalFormatted = format.FormatMoney(r.Total, r.Currency)
+
+// ❌ BAD
+fmt.Sprintf("%s %.2f", cur, amount)
+fmt.Sprintf("%.2f", amount)
+```

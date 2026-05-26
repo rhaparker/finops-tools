@@ -13,5 +13,6 @@ var costCmd = &cobra.Command{
 
 func init() {
 	costCmd.GroupID = "core"
+	bindAWSPersistentFlags(costCmd)
 	rootCmd.AddCommand(costCmd)
 }

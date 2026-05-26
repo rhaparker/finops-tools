@@ -12,5 +12,6 @@ var accountCmd = &cobra.Command{
 
 func init() {
 	accountCmd.GroupID = "setup"
+	bindAWSPersistentFlags(accountCmd)
 	rootCmd.AddCommand(accountCmd)
 }

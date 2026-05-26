@@ -29,9 +29,10 @@ type CostExplorerAPI interface {
 type ListAWSAccountNamesFunc func(context.Context, aws.Config) (map[string]string, error)
 
 type fetchAWSOptions struct {
-	Now              time.Time
-	NewCostExplorer  func(aws.Config) CostExplorerAPI
-	ListAccountNames ListAWSAccountNamesFunc
+	Now                 time.Time
+	NewCostExplorer     func(aws.Config) CostExplorerAPI
+	ListAccountNames    ListAWSAccountNamesFunc
+	ResolveAccountNames ResolveAWSAccountNamesFunc
 }
 
 func fetchAWSNetAmortized(ctx context.Context, q CostQuery) (CostResult, error) {
@@ -45,6 +46,7 @@ func fetchAWSNetAmortized(ctx context.Context, q CostQuery) (CostResult, error) 
 	}
 	if q.AWSFetch != nil {
 		opts.ListAccountNames = q.AWSFetch.ListAccountNames
+		opts.ResolveAccountNames = q.AWSFetch.ResolveAccountNames
 	}
 	return fetchAWSNetAmortizedWith(ctx, q, opts)
 }
@@ -90,8 +92,8 @@ func fetchAWSNetAmortizedWith(ctx context.Context, q CostQuery, opts fetchAWSOpt
 		return CostResult{}, fetchErr
 	}
 
-	if q.SplitBy == SplitByAccount && opts.ListAccountNames != nil {
-		breakdown = applyAWSAccountNames(ctx, cfg, breakdown, opts.ListAccountNames)
+	if q.SplitBy == SplitByAccount {
+		breakdown = applyAWSAccountNames(ctx, cfg, breakdown, opts)
 	}
 
 	return CostResult{
@@ -123,13 +125,13 @@ func applyAWSAccountNames(
 	ctx context.Context,
 	cfg aws.Config,
 	breakdown []CostBreakdownItem,
-	list ListAWSAccountNamesFunc,
+	opts fetchAWSOptions,
 ) []CostBreakdownItem {
-	if len(breakdown) == 0 || list == nil {
+	if len(breakdown) == 0 {
 		return breakdown
 	}
-	names, err := list(ctx, cfg)
-	if err != nil {
+	names, err := lookupAWSAccountNames(ctx, cfg, breakdownAccountIDs(breakdown), opts)
+	if err != nil || len(names) == 0 {
 		return breakdown
 	}
 	for i := range breakdown {
@@ -138,6 +140,41 @@ func applyAWSAccountNames(
 		}
 	}
 	return breakdown
+}
+
+func breakdownAccountIDs(breakdown []CostBreakdownItem) []string {
+	seen := make(map[string]struct{}, len(breakdown))
+	ids := make([]string, 0, len(breakdown))
+	for _, item := range breakdown {
+		id := strings.TrimSpace(item.Account)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func lookupAWSAccountNames(
+	ctx context.Context,
+	cfg aws.Config,
+	accountIDs []string,
+	opts fetchAWSOptions,
+) (map[string]string, error) {
+	if len(accountIDs) == 0 {
+		return nil, nil
+	}
+	if opts.ResolveAccountNames != nil {
+		return opts.ResolveAccountNames(ctx, cfg, accountIDs)
+	}
+	if opts.ListAccountNames != nil {
+		return opts.ListAccountNames(ctx, cfg)
+	}
+	return nil, nil
 }
 
 func linkedAccountFilter(accountID string, linked bool) *types.Expression {
@@ -279,4 +316,98 @@ func sumNetAmortizedGrouped(
 	})
 
 	return total, currency, breakdown, nil
+}
+
+func fetchAWSDailyNetAmortized(ctx context.Context, q CostQuery) ([]DailyCostItem, string, error) {
+	opts := fetchAWSOptions{
+		Now: time.Now(),
+		NewCostExplorer: func(cfg aws.Config) CostExplorerAPI {
+			return costexplorer.NewFromConfig(cfg, func(o *costexplorer.Options) {
+				o.Region = costExplorerRegion
+			})
+		},
+	}
+	return fetchAWSDailyNetAmortizedWith(ctx, q, opts)
+}
+
+func fetchAWSDailyNetAmortizedWith(ctx context.Context, q CostQuery, opts fetchAWSOptions) ([]DailyCostItem, string, error) {
+	if opts.Now.IsZero() {
+		opts.Now = time.Now()
+	}
+	if opts.NewCostExplorer == nil {
+		opts.NewCostExplorer = func(cfg aws.Config) CostExplorerAPI {
+			return costexplorer.NewFromConfig(cfg, func(o *costexplorer.Options) {
+				o.Region = costExplorerRegion
+			})
+		}
+	}
+
+	acct := q.Accounts[0]
+	cfg := acct.AWSConfig
+	if cfg.Region == "" {
+		cfg.Region = costExplorerRegion
+	}
+
+	dr := LastNDaysRange(q.Days, opts.Now)
+	ce := opts.NewCostExplorer(cfg)
+	filter := linkedAccountFilter(acct.AccountID, acct.IsLinked())
+	return sumNetAmortizedDaily(ctx, ce, dr, filter)
+}
+
+func sumNetAmortizedDaily(ctx context.Context, ce CostExplorerAPI, dr DateRange, filter *types.Expression) ([]DailyCostItem, string, error) {
+	byDate := make(map[string]float64)
+	currency := "USD"
+	var token *string
+
+	for {
+		out, err := ce.GetCostAndUsage(ctx, &costexplorer.GetCostAndUsageInput{
+			TimePeriod: &types.DateInterval{
+				Start: aws.String(formatDate(dr.Start)),
+				End:   aws.String(formatDate(dr.End)),
+			},
+			Granularity:   types.GranularityDaily,
+			Metrics:       []string{MetricNetAmortized},
+			Filter:        filter,
+			NextPageToken: token,
+		})
+		if err != nil {
+			return nil, "", fmt.Errorf("cost explorer GetCostAndUsage: %w", err)
+		}
+
+		for _, row := range out.ResultsByTime {
+			date := strings.TrimSpace(aws.ToString(row.TimePeriod.Start))
+			if date == "" {
+				continue
+			}
+			m, ok := row.Total[MetricNetAmortized]
+			if !ok {
+				continue
+			}
+			amt, err := strconv.ParseFloat(aws.ToString(m.Amount), 64)
+			if err != nil {
+				return nil, "", fmt.Errorf("parse %s amount for %s: %w", MetricNetAmortized, date, err)
+			}
+			byDate[date] += amt
+			if u := aws.ToString(m.Unit); u != "" {
+				currency = u
+			}
+		}
+
+		if out.NextPageToken == nil || *out.NextPageToken == "" {
+			break
+		}
+		token = out.NextPageToken
+	}
+
+	daily := make([]DailyCostItem, 0, len(byDate))
+	for date, amt := range byDate {
+		if amt == 0 {
+			continue
+		}
+		daily = append(daily, DailyCostItem{Date: date, Amount: amt})
+	}
+	sort.Slice(daily, func(i, j int) bool {
+		return daily[i].Date < daily[j].Date
+	})
+	return daily, currency, nil
 }

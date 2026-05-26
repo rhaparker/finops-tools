@@ -32,6 +32,7 @@ func MergeResults(results []CostResult) (CostResult, error) {
 		ids   []string
 	)
 	byKey := make(map[string]float64)
+	accountNames := make(map[string]string)
 
 	for _, r := range results {
 		if r.Provider != out.Provider {
@@ -56,7 +57,11 @@ func MergeResults(results []CostResult) (CostResult, error) {
 		out.Amount += r.Amount
 
 		for _, item := range r.Breakdown {
-			byKey[item.Label(out.SplitBy)] += item.Amount
+			key := item.Label(out.SplitBy)
+			byKey[key] += item.Amount
+			if out.SplitBy == SplitByAccount && item.AccountName != "" {
+				accountNames[key] = item.AccountName
+			}
 		}
 	}
 
@@ -73,6 +78,7 @@ func MergeResults(results []CostResult) (CostResult, error) {
 			switch out.SplitBy {
 			case SplitByAccount:
 				item.Account = key
+				item.AccountName = accountNames[key]
 			default:
 				item.Service = key
 			}
@@ -84,4 +90,33 @@ func MergeResults(results []CostResult) (CostResult, error) {
 	}
 
 	return out, nil
+}
+
+// MergeDaily combines per-account daily series by summing amounts per date.
+func MergeDaily(series [][]DailyCostItem) []DailyCostItem {
+	if len(series) == 0 {
+		return nil
+	}
+	if len(series) == 1 {
+		return series[0]
+	}
+
+	byDate := make(map[string]float64)
+	for _, s := range series {
+		for _, item := range s {
+			byDate[item.Date] += item.Amount
+		}
+	}
+
+	out := make([]DailyCostItem, 0, len(byDate))
+	for date, amt := range byDate {
+		if amt == 0 {
+			continue
+		}
+		out = append(out, DailyCostItem{Date: date, Amount: amt})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Date < out[j].Date
+	})
+	return out
 }

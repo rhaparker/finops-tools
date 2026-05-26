@@ -33,8 +33,8 @@ func TestAccountListAWS(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	accountListConfigPath = path
-	t.Cleanup(func() { accountListConfigPath = "" })
+	awsFlags.ConfigPath = path
+	t.Cleanup(func() { awsFlags.ConfigPath = "" })
 
 	buf := new(bytes.Buffer)
 	accountListCmd.SetOut(buf)
@@ -69,8 +69,8 @@ func TestAccountListAWSEmpty(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	accountListConfigPath = path
-	t.Cleanup(func() { accountListConfigPath = "" })
+	awsFlags.ConfigPath = path
+	t.Cleanup(func() { awsFlags.ConfigPath = "" })
 
 	buf := new(bytes.Buffer)
 	accountListCmd.SetOut(buf)

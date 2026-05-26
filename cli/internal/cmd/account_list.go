@@ -11,8 +11,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var accountListConfigPath string
-
 var accountListCmd = &cobra.Command{
 	Use:   "list [provider]",
 	Short: "List registered cloud accounts and aliases",
@@ -31,7 +29,6 @@ Examples:
 
 func init() {
 	accountCmd.AddCommand(accountListCmd)
-	accountListCmd.Flags().StringVar(&accountListConfigPath, "config", "", "Path to finops config file (default: OS-specific config dir)")
 }
 
 func runAccountList(cmd *cobra.Command, args []string) error {
@@ -44,7 +41,7 @@ func runAccountList(cmd *cobra.Command, args []string) error {
 		provider = p
 	}
 
-	path, err := configstore.ResolvePath(accountListConfigPath)
+	path, err := configstore.ResolvePath(awsFlags.ConfigPath)
 	if err != nil {
 		return err
 	}

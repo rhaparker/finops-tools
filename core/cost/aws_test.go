@@ -304,6 +304,110 @@ func TestFetchAWSNetAmortizedByService(t *testing.T) {
 	}
 }
 
+func TestApplyAWSAccountNamesResolve(t *testing.T) {
+	breakdown := []CostBreakdownItem{
+		{Account: "111111111111", Amount: 50},
+		{Account: "222222222222", Amount: 30},
+	}
+	resolve := func(_ context.Context, _ aws.Config, ids []string) (map[string]string, error) {
+		if len(ids) != 2 {
+			t.Fatalf("ids = %v", ids)
+		}
+		return map[string]string{
+			"111111111111": "Member One",
+			"222222222222": "Member Two",
+		}, nil
+	}
+	out := applyAWSAccountNames(context.Background(), aws.Config{}, breakdown, fetchAWSOptions{
+		ResolveAccountNames: resolve,
+	})
+	if out[0].AccountName != "Member One" || out[1].AccountName != "Member Two" {
+		t.Fatalf("breakdown = %+v", out)
+	}
+}
+
+func TestSumNetAmortizedDaily(t *testing.T) {
+	ce := &fakeCE{
+		pages: [][]types.ResultByTime{
+			{
+				{
+					TimePeriod: &types.DateInterval{Start: aws.String("2026-04-25"), End: aws.String("2026-04-26")},
+					Total: map[string]types.MetricValue{
+						MetricNetAmortized: {Amount: aws.String("10"), Unit: aws.String("USD")},
+					},
+				},
+				{
+					TimePeriod: &types.DateInterval{Start: aws.String("2026-04-26"), End: aws.String("2026-04-27")},
+					Total: map[string]types.MetricValue{
+						MetricNetAmortized: {Amount: aws.String("5"), Unit: aws.String("USD")},
+					},
+				},
+			},
+			{
+				{
+					TimePeriod: &types.DateInterval{Start: aws.String("2026-04-27"), End: aws.String("2026-04-28")},
+					Total: map[string]types.MetricValue{
+						MetricNetAmortized: {Amount: aws.String("2.5"), Unit: aws.String("USD")},
+					},
+				},
+			},
+		},
+	}
+
+	dr := DateRange{
+		Start: time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC),
+		End:   time.Date(2026, 4, 28, 0, 0, 0, 0, time.UTC),
+	}
+	daily, currency, err := sumNetAmortizedDaily(context.Background(), ce, dr, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if currency != "USD" {
+		t.Errorf("currency = %q", currency)
+	}
+	if len(daily) != 3 {
+		t.Fatalf("daily len = %d, want 3: %+v", len(daily), daily)
+	}
+	if daily[0].Date != "2026-04-25" || daily[0].Amount != 10 {
+		t.Errorf("first = %+v", daily[0])
+	}
+	if daily[2].Date != "2026-04-27" || daily[2].Amount != 2.5 {
+		t.Errorf("last = %+v", daily[2])
+	}
+}
+
+func TestFetchAWSDailyNetAmortizedWith(t *testing.T) {
+	now := time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC)
+	ce := &fakeCE{
+		pages: [][]types.ResultByTime{{
+			{
+				TimePeriod: &types.DateInterval{Start: aws.String("2026-05-24"), End: aws.String("2026-05-25")},
+				Total: map[string]types.MetricValue{
+					MetricNetAmortized: {Amount: aws.String("99"), Unit: aws.String("USD")},
+				},
+			},
+		}},
+	}
+
+	daily, currency, err := fetchAWSDailyNetAmortizedWith(context.Background(), CostQuery{
+		Provider: ProviderAWS,
+		Accounts: []AccountTarget{{AccountID: "123456789012", AWSConfig: aws.Config{}}},
+		Days:     30,
+	}, fetchAWSOptions{
+		Now:             now,
+		NewCostExplorer: func(aws.Config) CostExplorerAPI { return ce },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if currency != "USD" {
+		t.Errorf("currency = %q", currency)
+	}
+	if len(daily) != 1 || daily[0].Amount != 99 {
+		t.Errorf("daily = %+v", daily)
+	}
+}
+
 func TestParseProvider(t *testing.T) {
 	p, err := ParseProvider("AWS")
 	if err != nil || p != ProviderAWS {

@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/openshift-online/finops-tools/cli/internal/format"
 	"github.com/openshift-online/finops-tools/core/cost"
 )
 
@@ -122,28 +123,5 @@ func csvBreakdownRow(r cost.CostResult, item cost.CostBreakdownItem) []string {
 }
 
 func formatAmount(amount float64) string {
-	s := fmt.Sprintf("%.2f", amount)
-	parts := strings.Split(s, ".")
-	intPart := parts[0]
-	neg := strings.HasPrefix(intPart, "-")
-	if neg {
-		intPart = intPart[1:]
-	}
-	var b strings.Builder
-	if neg {
-		b.WriteByte('-')
-	}
-	for i, c := range intPart {
-		if i > 0 && (len(intPart)-i)%3 == 0 {
-			b.WriteByte(',')
-		}
-		b.WriteRune(c)
-	}
-	b.WriteByte('.')
-	if len(parts) > 1 {
-		b.WriteString(parts[1])
-	} else {
-		b.WriteString("00")
-	}
-	return b.String()
+	return format.FormatAmount(amount)
 }

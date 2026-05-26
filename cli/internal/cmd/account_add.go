@@ -16,9 +16,6 @@ var (
 	accountAddAlias           string
 	accountAddPayer           string
 	accountAddRole            string
-	accountAddAuthMethod      string
-	accountAddCredentialsFile string
-	accountAddConfigPath      string
 )
 
 var accountAddCmd = &cobra.Command{
@@ -56,11 +53,11 @@ and the configured auth method (defaults.aws.auth_method or --auth-method).`,
 			return err
 		}
 		if strings.TrimSpace(accountAddPayer) != "" {
-			if _, err := resolveLinkedRoleName(cmd, accountAddConfigPath, accountAddRole); err != nil {
+			if _, err := resolveLinkedRoleName(cmd, awsFlags.ConfigPath, accountAddRole); err != nil {
 				return err
 			}
 		}
-		method, err := resolveAuthMethod(cmd, accountAddConfigPath, accountAddAuthMethod)
+		method, err := resolveAuthMethod(cmd, awsFlags.ConfigPath, awsFlags.AuthMethod)
 		if err != nil {
 			return err
 		}
@@ -78,9 +75,6 @@ func init() {
 	accountAddCmd.Flags().StringVar(&accountAddAlias, "alias", "", "Friendly alias for the account (e.g. rh-control)")
 	accountAddCmd.Flags().StringVar(&accountAddPayer, "payer", "", "Registered payer alias (linked account: assume role in <account> from this payer)")
 	accountAddCmd.Flags().StringVar(&accountAddRole, "role", "", "IAM role name in the linked account (default: config aws.linked_role or OrganizationAccountAccessRole)")
-	accountAddCmd.Flags().StringVar(&accountAddAuthMethod, "auth-method", string(awsauth.MethodSAML), "AWS authentication method: saml or profile (overrides config default when set)")
-	accountAddCmd.Flags().StringVar(&accountAddCredentialsFile, "credentials-file", "", "Path to AWS credentials file (default: ~/.aws/credentials)")
-	accountAddCmd.Flags().StringVar(&accountAddConfigPath, "config", "", "Path to finops config file (default: OS-specific config dir)")
 }
 
 func runAccountAdd(cmd *cobra.Command, args []string) error {
@@ -109,7 +103,7 @@ func runAccountAdd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := registerAWSAccount(accountAddConfigPath, res.AccountID, accountAddAlias); err != nil {
+	if err := registerAWSAccount(awsFlags.ConfigPath, res.AccountID, accountAddAlias); err != nil {
 		return err
 	}
 
@@ -118,16 +112,16 @@ func runAccountAdd(cmd *cobra.Command, args []string) error {
 
 func runAccountAddLinked(cmd *cobra.Command, linkedAccountID string) error {
 	payerAlias := strings.TrimSpace(accountAddPayer)
-	payerAccountID, err := payerAccountIDFromConfig(accountAddConfigPath, payerAlias)
+	payerAccountID, err := payerAccountIDFromConfig(awsFlags.ConfigPath, payerAlias)
 	if err != nil {
 		return err
 	}
 
-	roleARN, err := resolveLinkedRoleARN(cmd, accountAddConfigPath, linkedAccountID, accountAddRole)
+	roleARN, err := resolveLinkedRoleARN(cmd, awsFlags.ConfigPath, linkedAccountID, accountAddRole)
 	if err != nil {
 		return err
 	}
-	roleName, err := resolveLinkedRoleName(cmd, accountAddConfigPath, accountAddRole)
+	roleName, err := resolveLinkedRoleName(cmd, awsFlags.ConfigPath, accountAddRole)
 	if err != nil {
 		return err
 	}
@@ -145,14 +139,14 @@ func runAccountAddLinked(cmd *cobra.Command, linkedAccountID string) error {
 		RoleARN:         roleARN,
 		PayerEnsureOpts: payerEnsure,
 		EnsureLinkedOpts: awsconfig.EnsureLinkedOptions{
-			CredentialsPath: accountAddCredentialsFile,
+			CredentialsPath: awsFlags.CredentialsFile,
 		},
 	})
 	if err != nil {
 		return err
 	}
 
-	if err := registerAWSLinkedAccount(accountAddConfigPath, res.AccountID, accountAddAlias, payerAlias, roleName); err != nil {
+	if err := registerAWSLinkedAccount(awsFlags.ConfigPath, res.AccountID, accountAddAlias, payerAlias, roleName); err != nil {
 		return err
 	}
 
@@ -161,10 +155,10 @@ func runAccountAddLinked(cmd *cobra.Command, linkedAccountID string) error {
 
 func buildAWSEnsureOptions(cmd *cobra.Command) (awsauth.EnsureOptions, error) {
 	return newAWSEnsureOptions(cmd, awsEnsureConfig{
-		configPath:      accountAddConfigPath,
-		authMethodFlag:  accountAddAuthMethod,
+		configPath:      awsFlags.ConfigPath,
+		authMethodFlag:  awsFlags.AuthMethod,
 		force:           accountAddForce,
-		credentialsFile: accountAddCredentialsFile,
+		credentialsFile: awsFlags.CredentialsFile,
 	})
 }
 

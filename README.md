@@ -177,6 +177,37 @@ finops cost get --account 123456789012 --split-by account
 
 `pretty-print` uses colors and Unicode bars when stdout is a TTY. Set `NO_COLOR=1` to disable; `FORCE_COLOR=1` forces colors when piping to a capable viewer.
 
+### Reports
+
+Generate HTML reports from configured accounts. Templates use **Jinja2 syntax** (rendered with [gonja](https://github.com/nikolalohinski/gonja) in the CLI binary).
+
+```bash
+finops report list
+finops report generate costs --account-alias rh-control
+finops report generate costs --account-alias rh-control -o costs.html
+```
+
+The **costs** template includes:
+
+- Total net amortized cost for the last 30 days
+- Breakdown by linked AWS account
+- Breakdown by AWS service
+- Daily cost trend chart (embedded SVG; works when opening the HTML file locally)
+
+| Flag | Description |
+|------|-------------|
+| `template` | Positional argument: report template name (run `finops report list` for options) |
+| `--format` | Output format (default: `html`) |
+| `--account` | Comma-separated payer AWS account IDs (at least one of `--account` or `--account-alias` is required) |
+| `--account-alias` | Comma-separated configured aliases |
+| `--auth-method` | `saml` (default) or `profile` |
+| `--config` | Path to finops config file |
+| `--credentials-file` | Path to AWS credentials file |
+| `--output` / `-o` | Write HTML to a file instead of stdout |
+| `--quiet` | Suppress progress messages on stderr (HTML still goes to stdout or `--output`) |
+
+Progress lines (credential checks, each Cost Explorer query, render) are printed to **stderr** so you can redirect HTML safely, e.g. `finops report generate ... -o report.html`.
+
 ## Cross-compile (local)
 
 ```bash

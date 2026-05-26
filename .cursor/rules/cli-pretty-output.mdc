@@ -54,9 +54,13 @@ return output.WriteAWSAccountList(cmd.OutOrStdout(), rows)
 
 Map `configstore` / `core` types to `output` row structs in `cmd`; keep `output` free of Cobra imports.
 
+## Dollar amounts
+
+Use `cli/internal/format` (`FormatAmount`, `FormatMoney`) for all human-readable currency strings. See `dollar-formatting.mdc`.
+
 ## Machine-readable formats
 
-When a command needs JSON/CSV, follow `cost.go`: `ParseFormat`, `Write*Result(w, format, data)`, default `pretty-print`. Pretty path always goes through `*_pretty.go`.
+When a command needs JSON/CSV, follow `cost.go`: `ParseFormat`, `Write*Result(w, format, data)`, default `pretty-print`. Pretty path always goes through `*_pretty.go`. Do not add thousands separators to JSON/CSV.
 
 ## Tests
 
