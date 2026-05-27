@@ -31,7 +31,7 @@ func TestRenderCostsHTML(t *testing.T) {
 		},
 		Accounts: []cost.AccountTarget{{
 			AccountID:   "123456789012",
-			DisplayName: "rh-control",
+			DisplayName: "RH Control Production",
 		}},
 	})
 	if err != nil {
@@ -40,7 +40,7 @@ func TestRenderCostsHTML(t *testing.T) {
 	out := buf.String()
 	for _, want := range []string{
 		"Costs Report",
-		"rh-control",
+		"RH Control Production",
 		"USD 1,000.00",
 		"Member",
 		"Amazon EC2",
@@ -56,10 +56,20 @@ func TestRenderCostsHTML(t *testing.T) {
 
 func TestFormatAccountSummary(t *testing.T) {
 	s := formatAccountSummary([]cost.AccountTarget{{
-		DisplayAlias: "quay",
-		AccountID:    "111",
+		DisplayName: "Quay Production",
+		AccountID:   "111111111111",
 	}})
-	if s != "quay" {
+	if s != "Quay Production" {
+		t.Errorf("got %q", s)
+	}
+}
+
+func TestFormatAccountSummaryFallsBackToAccountID(t *testing.T) {
+	s := formatAccountSummary([]cost.AccountTarget{{
+		DisplayAlias: "quay",
+		AccountID:    "111111111111",
+	}})
+	if s != "111111111111" {
 		t.Errorf("got %q", s)
 	}
 }

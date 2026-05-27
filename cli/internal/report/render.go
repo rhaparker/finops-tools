@@ -110,10 +110,6 @@ func formatAccountSummary(accounts []cost.AccountTarget) string {
 			names = append(names, name)
 			continue
 		}
-		if alias := strings.TrimSpace(a.DisplayAlias); alias != "" {
-			names = append(names, alias)
-			continue
-		}
 		names = append(names, a.AccountID)
 	}
 	return strings.Join(names, ", ")

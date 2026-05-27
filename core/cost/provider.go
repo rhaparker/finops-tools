@@ -90,7 +90,7 @@ type AccountTarget struct {
 	PayerAccountID string
 	// AWSConfig holds authenticated payer credentials for Cost Explorer (set by the CLI).
 	AWSConfig aws.Config
-	// DisplayName is a human-readable account name (alias or Organizations name from CLI).
+	// DisplayName is the AWS Organizations account name when resolved by the CLI.
 	DisplayName string
 	// DisplayAlias is the configured finops alias when the target was selected by alias.
 	DisplayAlias string

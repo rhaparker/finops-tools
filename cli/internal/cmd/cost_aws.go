@@ -103,12 +103,16 @@ func enrichCostTargetDisplayName(
 	store configstore.File,
 	_ string,
 ) error {
-	if alias := strings.TrimSpace(target.DisplayAlias); alias != "" {
-		target.DisplayName = alias
+	accountID := strings.TrimSpace(target.AccountID)
+	if accountID == "" {
 		return nil
 	}
 
-	accountID := target.AccountID
+	if name, err := awsconfig.AccountName(ctx, target.AWSConfig, accountID); err == nil && strings.TrimSpace(name) != "" {
+		target.DisplayName = name
+		return nil
+	}
+
 	lookupProfiles := account.AWSProfileNames(accountID, store.AliasForAccountID(accountID), nil)
 	if payerID := target.PayerAccountID; payerID != "" {
 		lookupProfiles = mergeProfileNames(
