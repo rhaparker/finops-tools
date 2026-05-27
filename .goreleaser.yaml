@@ -43,6 +43,7 @@ changelog:
       - "^test:"
 
 release:
+  prerelease: auto
   github:
     owner: openshift-online
     name: finops-tools
