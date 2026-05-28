@@ -17,6 +17,11 @@ func ListTags(ctx context.Context, cfg aws.Config, accountID string) ([]Tag, err
 	return listTagsWithClient(ctx, newOrganizationsClient(cfg), accountID)
 }
 
+// SetAccountTag adds or updates one AWS Organizations tag on accountID.
+func SetAccountTag(ctx context.Context, cfg aws.Config, accountID, tagKey, tagValue string) error {
+	return setAccountTagWithClient(ctx, newOrganizationsClient(cfg), accountID, tagKey, tagValue)
+}
+
 func listTagsWithClient(ctx context.Context, client OrganizationsAPI, accountID string) ([]Tag, error) {
 	accountID = strings.TrimSpace(accountID)
 	if accountID == "" {
@@ -26,27 +31,15 @@ func listTagsWithClient(ctx context.Context, client OrganizationsAPI, accountID 
 	tags := make([]Tag, 0)
 	var token *string
 	for {
-		out, err := client.ListTagsForResource(ctx, &organizations.ListTagsForResourceInput{
-			ResourceId: aws.String(accountID),
-			NextToken:  token,
-		})
+		pageTags, nextToken, err := client.ListTagsForAccount(ctx, accountID, token)
 		if err != nil {
 			return nil, err
 		}
-		for _, tag := range out.Tags {
-			key := strings.TrimSpace(aws.ToString(tag.Key))
-			if key == "" {
-				continue
-			}
-			tags = append(tags, Tag{
-				Key:   key,
-				Value: strings.TrimSpace(aws.ToString(tag.Value)),
-			})
-		}
-		if out.NextToken == nil || aws.ToString(out.NextToken) == "" {
+		tags = append(tags, pageTags...)
+		if nextToken == nil || aws.ToString(nextToken) == "" {
 			break
 		}
-		token = out.NextToken
+		token = nextToken
 	}
 
 	slices.SortFunc(tags, func(a, b Tag) int {
@@ -56,6 +49,23 @@ func listTagsWithClient(ctx context.Context, client OrganizationsAPI, accountID 
 		return strings.Compare(a.Value, b.Value)
 	})
 	return tags, nil
+}
+
+func setAccountTagWithClient(ctx context.Context, client OrganizationsAPI, accountID, tagKey, tagValue string) error {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return fmt.Errorf("account ID is required")
+	}
+	tagKey = strings.TrimSpace(tagKey)
+	if tagKey == "" {
+		return fmt.Errorf("tag key is required")
+	}
+	tagValue = strings.TrimSpace(tagValue)
+	if tagValue == "" {
+		return fmt.Errorf("tag value is required")
+	}
+
+	return client.SetAccountTag(ctx, accountID, tagKey, tagValue)
 }
 
 // AccountName returns the AWS Organizations account name for accountID.

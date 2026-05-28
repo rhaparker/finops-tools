@@ -14,17 +14,18 @@ import (
 )
 
 var accountTagsCmd = &cobra.Command{
-	Use:   "list-tags <account>",
+	Use:   "list-tags",
 	Short: "List AWS Organizations tags for an account",
 	Long: `List all AWS Organizations tags for an account.
 
-<account> can be a registered alias or a 12-digit AWS account ID.
+Pass either --account-alias or --account-id.
 
 Examples:
-  finops account list-tags rh-control
-  finops account list-tags osd-tenant-1 --format json
-  finops account list-tags 123456789012 --format csv`,
-	Args: cobra.ExactArgs(1),
+  finops account list-tags --account-alias rh-control
+  finops account list-tags --account-alias osd-tenant-1 --format json
+  finops account list-tags --account-id 123456789012 --format csv
+  finops account list-tags --account-id 111111111111 --payer rh-control`,
+	Args: cobra.NoArgs,
 	PreRunE: func(_ *cobra.Command, _ []string) error {
 		_, err := output.ParseFormat(accountTagsFormat)
 		return err
@@ -37,6 +38,9 @@ var (
 	accountTagsLoadConfigForCreds = loadAWSConfigForCredentialsAccount
 	accountTagsFetch              = coreaccount.ListTags
 	accountTagsFormat             string
+	accountTagsPayer              string
+	accountTagsAlias              string
+	accountTagsAccountID          string
 )
 
 type accountTagsTarget struct {
@@ -49,6 +53,9 @@ func init() {
 	accountCmd.AddCommand(accountTagsCmd)
 	accountTagsCmd.Flags().StringVar(&accountTagsFormat, "format", string(output.FormatPrettyPrint),
 		"Output format: pretty-print, json, csv")
+	accountTagsCmd.Flags().StringVar(&accountTagsPayer, "payer", "", "Registered payer alias to use for credentials when listing account tags")
+	accountTagsCmd.Flags().StringVar(&accountTagsAlias, "account-alias", "", "Registered account alias")
+	accountTagsCmd.Flags().StringVar(&accountTagsAccountID, "account-id", "", "12-digit AWS account ID")
 }
 
 func runAccountTags(cmd *cobra.Command, args []string) error {
@@ -66,9 +73,16 @@ func runAccountTags(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	target, err := resolveAccountTagsTarget(cfg, args[0])
+	target, err := resolveAccountTagsTargetExplicit(cfg, accountTagsAlias, accountTagsAccountID)
 	if err != nil {
 		return err
+	}
+	if payerAlias := strings.TrimSpace(accountTagsPayer); payerAlias != "" {
+		payerID, ok := cfg.PayerAccountIDForAlias(payerAlias)
+		if !ok {
+			return errUnknownPayerAlias(payerAlias)
+		}
+		target.CredentialsAccountID = payerID
 	}
 
 	profiles := account.AWSProfileNames(
@@ -114,51 +128,55 @@ func runAccountTags(cmd *cobra.Command, args []string) error {
 	})
 }
 
-func resolveAccountTagsTarget(cfg configstore.File, accountRef string) (accountTagsTarget, error) {
-	accountRef = strings.TrimSpace(accountRef)
-	if accountRef == "" {
-		return accountTagsTarget{}, fmt.Errorf("account is required")
+func resolveAccountTagsTargetExplicit(cfg configstore.File, accountAlias, accountID string) (accountTagsTarget, error) {
+	accountAlias = strings.TrimSpace(accountAlias)
+	accountID = strings.TrimSpace(accountID)
+	if accountAlias != "" && accountID != "" {
+		return accountTagsTarget{}, fmt.Errorf("provide exactly one of --account-alias or --account-id")
+	}
+	if accountAlias == "" && accountID == "" {
+		return accountTagsTarget{}, fmt.Errorf("provide exactly one of --account-alias or --account-id")
 	}
 
-	if linked, ok := cfg.LinkedAccountForAlias(accountRef); ok {
-		payerID, ok := cfg.PayerAccountIDForAlias(linked.PayerAlias)
-		if !ok {
-			return accountTagsTarget{}, fmt.Errorf("unknown payer alias %q for linked account %q", linked.PayerAlias, accountRef)
+	if accountAlias != "" {
+		if linked, ok := cfg.LinkedAccountForAlias(accountAlias); ok {
+			payerID, ok := cfg.PayerAccountIDForAlias(linked.PayerAlias)
+			if !ok {
+				return accountTagsTarget{}, fmt.Errorf("unknown payer alias %q for linked account %q", linked.PayerAlias, accountAlias)
+			}
+			return accountTagsTarget{
+				AccountID:            linked.AccountID,
+				CredentialsAccountID: payerID,
+				Alias:                accountAlias,
+			}, nil
 		}
-		return accountTagsTarget{
-			AccountID:            linked.AccountID,
-			CredentialsAccountID: payerID,
-			Alias:                accountRef,
-		}, nil
+
+		if payerID, ok := cfg.PayerAccountIDForAlias(accountAlias); ok {
+			return accountTagsTarget{
+				AccountID:            payerID,
+				CredentialsAccountID: payerID,
+				Alias:                accountAlias,
+			}, nil
+		}
+		return accountTagsTarget{}, fmt.Errorf("unknown account alias %q", accountAlias)
 	}
 
-	if payerID, ok := cfg.PayerAccountIDForAlias(accountRef); ok {
-		return accountTagsTarget{
-			AccountID:            payerID,
-			CredentialsAccountID: payerID,
-			Alias:                accountRef,
-		}, nil
+	if err := account.ValidateAWSAccountID(accountID); err != nil {
+		return accountTagsTarget{}, err
 	}
 
-	if err := account.ValidateAWSAccountID(accountRef); err != nil {
-		return accountTagsTarget{}, fmt.Errorf(
-			"unknown account alias %q (use a registered alias or 12-digit AWS account ID)",
-			accountRef,
-		)
-	}
-
-	credsID := accountRef
-	if payerID, ok := cfg.PayerAccountIDForLinkedAccountID(accountRef); ok {
+	credsID := accountID
+	if payerID, ok := cfg.PayerAccountIDForLinkedAccountID(accountID); ok {
 		credsID = payerID
 	}
 
-	alias := cfg.AliasForAccountID(accountRef)
-	if alias == accountRef {
+	alias := cfg.AliasForAccountID(accountID)
+	if alias == accountID {
 		alias = ""
 	}
 
 	return accountTagsTarget{
-		AccountID:            accountRef,
+		AccountID:            accountID,
 		CredentialsAccountID: credsID,
 		Alias:                alias,
 	}, nil

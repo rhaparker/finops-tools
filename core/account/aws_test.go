@@ -53,6 +53,21 @@ func (f fakeOrganizations) ListTagsForResource(
 	return &organizations.ListTagsForResourceOutput{}, nil
 }
 
+func (f fakeOrganizations) ListTagsForAccount(
+	_ context.Context,
+	_ string,
+	_ *string,
+) ([]Tag, *string, error) {
+	return nil, nil, nil
+}
+
+func (f fakeOrganizations) SetAccountTag(
+	_ context.Context,
+	_, _, _ string,
+) error {
+	return nil
+}
+
 func (f fakeOrganizations) DescribeOrganization(
 	_ context.Context,
 	_ *organizations.DescribeOrganizationInput,
@@ -107,6 +122,32 @@ func (f *fakeOrganizationsTags) DescribeOrganization(
 	return nil, errors.New("not implemented")
 }
 
+func (f *fakeOrganizationsTags) ListTagsForAccount(
+	ctx context.Context,
+	_ string,
+	token *string,
+) ([]Tag, *string, error) {
+	out, err := f.ListTagsForResource(ctx, &organizations.ListTagsForResourceInput{NextToken: token})
+	if err != nil {
+		return nil, nil, err
+	}
+	page := make([]Tag, 0, len(out.Tags))
+	for _, tag := range out.Tags {
+		page = append(page, Tag{
+			Key:   aws.ToString(tag.Key),
+			Value: aws.ToString(tag.Value),
+		})
+	}
+	return page, out.NextToken, nil
+}
+
+func (f *fakeOrganizationsTags) SetAccountTag(
+	_ context.Context,
+	_, _, _ string,
+) error {
+	return errors.New("not implemented")
+}
+
 type fakeDescribeOrganizationClient struct {
 	output *organizations.DescribeOrganizationOutput
 	err    error
@@ -144,6 +185,81 @@ func (f fakeDescribeOrganizationClient) ListTagsForResource(
 	_ *organizations.ListTagsForResourceInput,
 	_ ...func(*organizations.Options),
 ) (*organizations.ListTagsForResourceOutput, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f fakeDescribeOrganizationClient) ListTagsForAccount(
+	_ context.Context,
+	_ string,
+	_ *string,
+) ([]Tag, *string, error) {
+	return nil, nil, errors.New("not implemented")
+}
+
+func (f fakeDescribeOrganizationClient) SetAccountTag(
+	_ context.Context,
+	_, _, _ string,
+) error {
+	return errors.New("not implemented")
+}
+
+type fakeOrganizationsTagMutator struct {
+	lastAccountID string
+	lastTagKey    string
+	lastTagValue  string
+	err           error
+}
+
+func (f *fakeOrganizationsTagMutator) SetAccountTag(
+	_ context.Context,
+	accountID, tagKey, tagValue string,
+) error {
+	f.lastAccountID = accountID
+	f.lastTagKey = tagKey
+	f.lastTagValue = tagValue
+	if f.err != nil {
+		return f.err
+	}
+	return nil
+}
+
+func (f *fakeOrganizationsTagMutator) DescribeAccount(
+	_ context.Context,
+	_ *organizations.DescribeAccountInput,
+	_ ...func(*organizations.Options),
+) (*organizations.DescribeAccountOutput, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *fakeOrganizationsTagMutator) ListAccounts(
+	_ context.Context,
+	_ *organizations.ListAccountsInput,
+	_ ...func(*organizations.Options),
+) (*organizations.ListAccountsOutput, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *fakeOrganizationsTagMutator) ListTagsForResource(
+	_ context.Context,
+	_ *organizations.ListTagsForResourceInput,
+	_ ...func(*organizations.Options),
+) (*organizations.ListTagsForResourceOutput, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *fakeOrganizationsTagMutator) ListTagsForAccount(
+	_ context.Context,
+	_ string,
+	_ *string,
+) ([]Tag, *string, error) {
+	return nil, nil, errors.New("not implemented")
+}
+
+func (f *fakeOrganizationsTagMutator) DescribeOrganization(
+	_ context.Context,
+	_ *organizations.DescribeOrganizationInput,
+	_ ...func(*organizations.Options),
+) (*organizations.DescribeOrganizationOutput, error) {
 	return nil, errors.New("not implemented")
 }
 
@@ -241,6 +357,50 @@ func TestListTagsWithClientValidationAndErrors(t *testing.T) {
 	wantErr := errors.New("boom")
 	client.err = wantErr
 	_, err := listTagsWithClient(context.Background(), client, "123456789012")
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("expected wrapped error %v, got %v", wantErr, err)
+	}
+}
+
+func TestSetAccountTagWithClient(t *testing.T) {
+	client := &fakeOrganizationsTagMutator{}
+	err := setAccountTagWithClient(context.Background(), client, "123456789012", "owner", "team-a")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := client.lastAccountID; got != "123456789012" {
+		t.Fatalf("resource id = %q", got)
+	}
+	if got := client.lastTagKey; got != "owner" {
+		t.Fatalf("tag key = %q", got)
+	}
+	if got := client.lastTagValue; got != "team-a" {
+		t.Fatalf("tag value = %q", got)
+	}
+}
+
+func TestSetAccountTagWithClientValidationAndErrors(t *testing.T) {
+	client := &fakeOrganizationsTagMutator{}
+	for _, tc := range []struct {
+		name      string
+		accountID string
+		tagKey    string
+		tagValue  string
+	}{
+		{name: "missing account id", accountID: " ", tagKey: "owner", tagValue: "team-a"},
+		{name: "missing tag key", accountID: "123456789012", tagKey: " ", tagValue: "team-a"},
+		{name: "missing tag value", accountID: "123456789012", tagKey: "owner", tagValue: " "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := setAccountTagWithClient(context.Background(), client, tc.accountID, tc.tagKey, tc.tagValue); err == nil {
+				t.Fatal("expected validation error")
+			}
+		})
+	}
+
+	wantErr := errors.New("boom")
+	client.err = wantErr
+	err := setAccountTagWithClient(context.Background(), client, "123456789012", "owner", "team-a")
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("expected wrapped error %v, got %v", wantErr, err)
 	}

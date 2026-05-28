@@ -122,6 +122,17 @@ finops account list
 finops account list aws
 ```
 
+Manage AWS Organizations tags on an account (registered alias or 12-digit account ID):
+
+```bash
+finops account list-tags --account-alias rh-control
+finops account list-tags --account-id 111111111111 --payer rh-control
+finops account add-tag --account-alias rh-control --tag-key owner --tag-value team-a
+finops account add-tag --account-id 111111111111 --tag-key owner --tag-value team-b --force --payer rh-control
+finops account update-tag --account-alias rh-control --tag-key owner --tag-value team-c
+finops account update-tag --account-id 111111111111 --tag-key env --tag-value prod --force --payer rh-control
+```
+
 **Cost Explorer (`finops cost get`) requires payer accounts only.** Linked-account credentials are for member-account APIs, not payer-level billing queries.
 
 Static secrets (API keys, etc.) for other tools live in `~/.config/finops/.env`; AWS sessions use `~/.aws/credentials` profiles.

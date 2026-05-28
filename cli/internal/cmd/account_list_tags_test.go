@@ -40,10 +40,16 @@ func TestRunAccountTagsLinkedAliasUsesPayerCredentials(t *testing.T) {
 	awsFlags.ConfigPath = path
 	awsFlags.AuthMethod = "profile"
 	accountTagsFormat = string(output.FormatPrettyPrint)
+	accountTagsPayer = ""
+	accountTagsAlias = "osd-tenant-1"
+	accountTagsAccountID = ""
 	t.Cleanup(func() {
 		awsFlags.ConfigPath = ""
 		awsFlags.AuthMethod = ""
 		accountTagsFormat = ""
+		accountTagsPayer = ""
+		accountTagsAlias = ""
+		accountTagsAccountID = ""
 	})
 
 	origEnsure := accountTagsEnsureCredentials
@@ -77,7 +83,7 @@ func TestRunAccountTagsLinkedAliasUsesPayerCredentials(t *testing.T) {
 	buf := new(bytes.Buffer)
 	accountTagsCmd.SetOut(buf)
 	accountTagsCmd.SetErr(buf)
-	if err := runAccountTags(accountTagsCmd, []string{"osd-tenant-1"}); err != nil {
+	if err := runAccountTags(accountTagsCmd, nil); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	out := buf.String()
@@ -103,10 +109,16 @@ func TestRunAccountTagsJSONFormat(t *testing.T) {
 	awsFlags.ConfigPath = path
 	awsFlags.AuthMethod = "profile"
 	accountTagsFormat = string(output.FormatJSON)
+	accountTagsPayer = ""
+	accountTagsAlias = "rh-control"
+	accountTagsAccountID = ""
 	t.Cleanup(func() {
 		awsFlags.ConfigPath = ""
 		awsFlags.AuthMethod = ""
 		accountTagsFormat = ""
+		accountTagsPayer = ""
+		accountTagsAlias = ""
+		accountTagsAccountID = ""
 	})
 
 	origEnsure := accountTagsEnsureCredentials
@@ -133,7 +145,7 @@ func TestRunAccountTagsJSONFormat(t *testing.T) {
 	buf := new(bytes.Buffer)
 	accountTagsCmd.SetOut(buf)
 	accountTagsCmd.SetErr(buf)
-	if err := runAccountTags(accountTagsCmd, []string{"rh-control"}); err != nil {
+	if err := runAccountTags(accountTagsCmd, nil); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	out := buf.String()
@@ -146,8 +158,16 @@ func TestRunAccountTagsJSONFormat(t *testing.T) {
 
 func TestRunAccountTagsInvalidFormat(t *testing.T) {
 	accountTagsFormat = "yaml"
-	t.Cleanup(func() { accountTagsFormat = "" })
-	err := runAccountTags(accountTagsCmd, []string{"rh-control"})
+	accountTagsPayer = ""
+	accountTagsAlias = "rh-control"
+	accountTagsAccountID = ""
+	t.Cleanup(func() {
+		accountTagsFormat = ""
+		accountTagsPayer = ""
+		accountTagsAlias = ""
+		accountTagsAccountID = ""
+	})
+	err := runAccountTags(accountTagsCmd, nil)
 	if err == nil {
 		t.Fatal("expected invalid format error")
 	}
@@ -156,7 +176,65 @@ func TestRunAccountTagsInvalidFormat(t *testing.T) {
 	}
 }
 
-func TestResolveAccountTagsTarget(t *testing.T) {
+func TestRunAccountTagsWithPayerOverride(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := configstore.RegisterAWSAccount(path, "123456789012", "rh-control"); err != nil {
+		t.Fatal(err)
+	}
+
+	awsFlags.ConfigPath = path
+	awsFlags.AuthMethod = "profile"
+	accountTagsFormat = string(output.FormatPrettyPrint)
+	accountTagsPayer = "rh-control"
+	accountTagsAlias = ""
+	accountTagsAccountID = "111111111111"
+	t.Cleanup(func() {
+		awsFlags.ConfigPath = ""
+		awsFlags.AuthMethod = ""
+		accountTagsFormat = ""
+		accountTagsPayer = ""
+		accountTagsAlias = ""
+		accountTagsAccountID = ""
+	})
+
+	origEnsure := accountTagsEnsureCredentials
+	origLoadConfig := accountTagsLoadConfigForCreds
+	origFetch := accountTagsFetch
+	t.Cleanup(func() {
+		accountTagsEnsureCredentials = origEnsure
+		accountTagsLoadConfigForCreds = origLoadConfig
+		accountTagsFetch = origFetch
+	})
+
+	accountTagsEnsureCredentials = func(_ context.Context, opts awsauth.EnsureOptions) (awsconfig.Result, error) {
+		if opts.AccountName != "123456789012" {
+			t.Fatalf("ensure AccountName = %q", opts.AccountName)
+		}
+		return awsconfig.Result{Profile: "rh-control"}, nil
+	}
+	accountTagsLoadConfigForCreds = func(context.Context, configstore.File, string, string) (aws.Config, error) {
+		return aws.Config{}, nil
+	}
+	accountTagsFetch = func(_ context.Context, _ aws.Config, accountID string) ([]coreaccount.Tag, error) {
+		if accountID != "111111111111" {
+			t.Fatalf("fetch accountID = %q", accountID)
+		}
+		return []coreaccount.Tag{{Key: "env", Value: "prod"}}, nil
+	}
+
+	buf := new(bytes.Buffer)
+	accountTagsCmd.SetOut(buf)
+	accountTagsCmd.SetErr(buf)
+	if err := runAccountTags(accountTagsCmd, nil); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !strings.Contains(buf.String(), "111111111111") {
+		t.Fatalf("unexpected output: %s", buf.String())
+	}
+}
+
+func TestResolveAccountTagsTargetExplicit(t *testing.T) {
 	cfg := configstore.Default()
 	var err error
 	cfg, err = cfg.SetAWSAlias("rh-control", "123456789012")
@@ -172,7 +250,7 @@ func TestResolveAccountTagsTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	linked, err := resolveAccountTagsTarget(cfg, "osd-tenant-1")
+	linked, err := resolveAccountTagsTargetExplicit(cfg, "osd-tenant-1", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +258,7 @@ func TestResolveAccountTagsTarget(t *testing.T) {
 		t.Fatalf("linked target = %+v", linked)
 	}
 
-	payer, err := resolveAccountTagsTarget(cfg, "rh-control")
+	payer, err := resolveAccountTagsTargetExplicit(cfg, "rh-control", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +266,21 @@ func TestResolveAccountTagsTarget(t *testing.T) {
 		t.Fatalf("payer target = %+v", payer)
 	}
 
-	if _, err := resolveAccountTagsTarget(cfg, "not-an-account"); err == nil {
+	byID, err := resolveAccountTagsTargetExplicit(cfg, "", "111111111111")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if byID.CredentialsAccountID != "123456789012" {
+		t.Fatalf("id target = %+v", byID)
+	}
+
+	if _, err := resolveAccountTagsTargetExplicit(cfg, "not-an-account", ""); err == nil {
 		t.Fatal("expected invalid alias/id error")
+	}
+	if _, err := resolveAccountTagsTargetExplicit(cfg, "", ""); err == nil {
+		t.Fatal("expected required selector error")
+	}
+	if _, err := resolveAccountTagsTargetExplicit(cfg, "rh-control", "123456789012"); err == nil {
+		t.Fatal("expected mutually exclusive selector error")
 	}
 }
