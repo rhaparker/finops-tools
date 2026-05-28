@@ -1,0 +1,26 @@
+---
+description: CLI list commands should expose pretty/json/csv output
+globs: cli/internal/cmd/*.go
+alwaysApply: false
+---
+
+# CLI list format options
+
+For user-facing list-style commands (for example: `list`, `list-tags`, `get` returning a table/list), always provide a `--format` flag with these options:
+
+- `pretty-print` (default, human-readable)
+- `json` (machine-readable)
+- `csv` (spreadsheet/automation friendly)
+
+## Requirements
+
+1. Validate format values with `output.ParseFormat`.
+2. Wire output through a formatter switch (`pretty-print`, `json`, `csv`).
+3. Keep JSON/CSV raw (no ANSI, no pretty-table-only formatting assumptions).
+4. Mention all supported formats in command help text/examples.
+
+## Example
+
+```go
+cmd.Flags().StringVar(&listFormat, "format", string(output.FormatPrettyPrint), "Output format: pretty-print, json, csv")
+```
