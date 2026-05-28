@@ -16,6 +16,8 @@ var (
 	accountAddAlias           string
 	accountAddPayer           string
 	accountAddRole            string
+	addAccountFn              = account.Add
+	detectAWSAccountKindFn    = awsconfig.DetectAccountKind
 )
 
 var accountAddCmd = &cobra.Command{
@@ -93,7 +95,7 @@ func runAccountAdd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	res, err := account.Add(cmd.Context(), account.AddOptions{
+	res, err := addAccountFn(cmd.Context(), account.AddOptions{
 		Provider:      provider,
 		AccountID:     accountID,
 		Alias:         accountAddAlias,
@@ -101,6 +103,32 @@ func runAccountAdd(cmd *cobra.Command, args []string) error {
 	})
 	if err != nil {
 		return err
+	}
+	if provider == account.ProviderAWS {
+		kind, kindErr := detectAWSAccountKindFn(cmd.Context(), res.Profile, res.AccountID)
+		switch kind {
+		case awsconfig.AccountKindLinked:
+			return fmt.Errorf(
+				"account %s appears to be a linked/member account (profile=%s); register it with --payer <payer-alias>",
+				res.AccountID, res.Profile,
+			)
+		case awsconfig.AccountKindUnknown:
+			if kindErr != nil {
+				if _, err := fmt.Fprintf(cmd.ErrOrStderr(),
+					"warning: unable to determine whether account %s is payer or linked (profile=%s): %v; continuing as payer because --payer was not set\n",
+					res.AccountID, res.Profile, kindErr,
+				); err != nil {
+					return err
+				}
+			} else {
+				if _, err := fmt.Fprintf(cmd.ErrOrStderr(),
+					"warning: unable to determine whether account %s is payer or linked (profile=%s); continuing as payer because --payer was not set\n",
+					res.AccountID, res.Profile,
+				); err != nil {
+					return err
+				}
+			}
+		}
 	}
 
 	if err := registerAWSAccount(awsFlags.ConfigPath, res.AccountID, accountAddAlias); err != nil {
