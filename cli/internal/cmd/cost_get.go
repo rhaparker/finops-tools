@@ -2,8 +2,6 @@
 package cmd
 
 import (
-	"fmt"
-	"strings"
 	"time"
 
 	"github.com/openshift-online/finops-tools/cli/internal/configstore"
@@ -17,6 +15,8 @@ var (
 	costGetAccount        string
 	costGetAccountAliases string
 	costGetFormat         string
+	costGetOU             string
+	costGetOUDirect       bool
 	costGetPayer          string
 	costGetProvider       string
 	costGetSplitBy        string
@@ -34,13 +34,24 @@ Period (default: last 30 calendar days, or defaults.cost.* in config):
 For linked accounts, credentials are obtained from the registered payer account.
 Use --payer with --account to query a member account that is not registered (the payer alias must be registered).
 
+Use --ou with --payer to query all accounts in an AWS Organizational Unit (recursive by default).
+Add --ou-direct to include only accounts directly in the OU, not descendant OUs.
+
+Examples:
+  finops cost get --ou ou-abcd-1234 --payer rh-control
+  finops cost get --ou ou-abcd-1234 --payer rh-control --ou-direct --days 7
+
 Authentication uses --auth-method when set, otherwise defaults.aws.auth_method in config (saml by default).
 
 Only AWS is supported today; GCP will be added later.`,
 	Args: cobra.NoArgs,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		if strings.TrimSpace(costGetAccount) == "" && strings.TrimSpace(costGetAccountAliases) == "" {
-			return fmt.Errorf("at least one of --account or --account-alias is required")
+		sel, err := parseCostTargetSelector(costGetAccount, costGetAccountAliases, costGetOU, costGetPayer, costGetOUDirect)
+		if err != nil {
+			return err
+		}
+		if err := validateCostTargetSelector(sel); err != nil {
+			return err
 		}
 		if _, err := output.ParseFormat(costGetFormat); err != nil {
 			return err
@@ -51,9 +62,6 @@ Only AWS is supported today; GCP will be added later.`,
 		if _, err := cost.ParseSplitBy(costGetSplitBy); err != nil {
 			return err
 		}
-		if strings.TrimSpace(costGetPayer) != "" && strings.TrimSpace(costGetAccount) == "" {
-			return fmt.Errorf("--payer requires --account")
-		}
 		return validatePeriodFlags(cmd)
 	},
 	RunE: runCostGet,
@@ -63,7 +71,9 @@ func init() {
 	costCmd.AddCommand(costGetCmd)
 	costGetCmd.Flags().StringVar(&costGetAccount, "account", "", "Payer AWS account ID(s), comma-separated 12-digit IDs")
 	costGetCmd.Flags().StringVar(&costGetAccountAliases, "account-alias", "", "Configured account alias(es), comma-separated (e.g. rh-control)")
-	costGetCmd.Flags().StringVar(&costGetPayer, "payer", "", "Registered payer alias for --account member IDs not in config (e.g. rhc)")
+	costGetCmd.Flags().StringVar(&costGetOU, "ou", "", "AWS OU ID(s), comma-separated (requires --payer; recursive by default)")
+	costGetCmd.Flags().BoolVar(&costGetOUDirect, "ou-direct", false, "Include only accounts directly in --ou, not descendant OUs")
+	costGetCmd.Flags().StringVar(&costGetPayer, "payer", "", "Registered payer alias for --account member IDs or --ou (e.g. rhc)")
 	costGetCmd.Flags().StringVar(&costGetFormat, "format", string(output.FormatPrettyPrint),
 		"Output format: pretty-print, json, csv")
 	costGetCmd.Flags().StringVar(&costGetProvider, "provider", string(cost.ProviderAWS),
@@ -99,21 +109,15 @@ func runCostGet(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	var accountIDs, aliases []string
-	if strings.TrimSpace(costGetAccount) != "" {
-		accountIDs, err = configstore.ParseAWSAccountIDs(costGetAccount)
-		if err != nil {
-			return err
-		}
-	}
-	if strings.TrimSpace(costGetAccountAliases) != "" {
-		aliases, err = configstore.ParseAccountAliases(costGetAccountAliases)
-		if err != nil {
-			return err
-		}
+	sel, err := parseCostTargetSelector(costGetAccount, costGetAccountAliases, costGetOU, costGetPayer, costGetOUDirect)
+	if err != nil {
+		return err
 	}
 
-	targets, err := configstore.ResolveCostTargets(cfg, accountIDs, aliases, costGetPayer)
+	targets, err := resolveCostTargetsWithOU(
+		cmd.Context(), cmd, cfg, sel,
+		awsFlags.ConfigPath, awsFlags.CredentialsFile, awsFlags.AuthMethod,
+	)
 	if err != nil {
 		return err
 	}

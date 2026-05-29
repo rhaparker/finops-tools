@@ -174,3 +174,36 @@ func TestParseAccountAliases(t *testing.T) {
 		t.Fatalf("got %v %v", aliases, err)
 	}
 }
+
+func TestParseOUIDs(t *testing.T) {
+	ids, err := ParseOUIDs("ou-abcd-1234, ou-efgh-5678")
+	if err != nil || len(ids) != 2 {
+		t.Fatalf("got %v %v", ids, err)
+	}
+	_, err = ParseOUIDs("r-root")
+	if err == nil {
+		t.Fatal("expected validation error for root ID")
+	}
+}
+
+func TestResolveOUAccountTargets(t *testing.T) {
+	cfg := Default()
+	var err error
+	cfg, err = cfg.SetAWSAlias("rh-control", "123456789012")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	targets, err := ResolveOUAccountTargets(cfg, []string{"111111111111", "222222222222"}, "rh-control")
+	if err != nil || len(targets) != 2 {
+		t.Fatalf("targets: %+v %v", targets, err)
+	}
+	if targets[0].PayerAccountID != "123456789012" || targets[1].PayerAccountID != "123456789012" {
+		t.Fatalf("payer not set: %+v", targets)
+	}
+
+	_, err = ResolveOUAccountTargets(cfg, []string{"111111111111"}, "unknown")
+	if err == nil {
+		t.Fatal("expected error for unknown payer alias")
+	}
+}

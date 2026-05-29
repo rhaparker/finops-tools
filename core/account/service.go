@@ -35,6 +35,21 @@ type OrganizationsAPI interface {
 		params *organizations.DescribeOrganizationInput,
 		optFns ...func(*organizations.Options),
 	) (*organizations.DescribeOrganizationOutput, error)
+	ListRoots(
+		ctx context.Context,
+		params *organizations.ListRootsInput,
+		optFns ...func(*organizations.Options),
+	) (*organizations.ListRootsOutput, error)
+	ListOrganizationalUnitsForParent(
+		ctx context.Context,
+		params *organizations.ListOrganizationalUnitsForParentInput,
+		optFns ...func(*organizations.Options),
+	) (*organizations.ListOrganizationalUnitsForParentOutput, error)
+	ListAccountsForParent(
+		ctx context.Context,
+		params *organizations.ListAccountsForParentInput,
+		optFns ...func(*organizations.Options),
+	) (*organizations.ListAccountsForParentOutput, error)
 }
 
 type organizationsClientFactory func(aws.Config) OrganizationsAPI
@@ -114,4 +129,28 @@ func (c organizationsClient) DescribeOrganization(
 	optFns ...func(*organizations.Options),
 ) (*organizations.DescribeOrganizationOutput, error) {
 	return c.client.DescribeOrganization(ctx, params, optFns...)
+}
+
+func (c organizationsClient) ListRoots(
+	ctx context.Context,
+	params *organizations.ListRootsInput,
+	optFns ...func(*organizations.Options),
+) (*organizations.ListRootsOutput, error) {
+	return c.client.ListRoots(ctx, params, optFns...)
+}
+
+func (c organizationsClient) ListOrganizationalUnitsForParent(
+	ctx context.Context,
+	params *organizations.ListOrganizationalUnitsForParentInput,
+	optFns ...func(*organizations.Options),
+) (*organizations.ListOrganizationalUnitsForParentOutput, error) {
+	return c.client.ListOrganizationalUnitsForParent(ctx, params, optFns...)
+}
+
+func (c organizationsClient) ListAccountsForParent(
+	ctx context.Context,
+	params *organizations.ListAccountsForParentInput,
+	optFns ...func(*organizations.Options),
+) (*organizations.ListAccountsForParentOutput, error) {
+	return c.client.ListAccountsForParent(ctx, params, optFns...)
 }

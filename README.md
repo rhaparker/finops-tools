@@ -133,6 +133,14 @@ finops account update-tag --account-alias rh-control --tag-key owner --tag-value
 finops account update-tag --account-id 111111111111 --tag-key env --tag-value prod --force --payer rh-control
 ```
 
+List AWS Organizational Units (for discovering OU IDs to use with `--ou` on cost/report commands):
+
+```bash
+finops account list-ous --payer rh-control
+finops account list-ous --payer rh-control --parent ou-abcd-1234
+finops account list-ous --payer rh-control --format json
+```
+
 **Cost Explorer (`finops cost get`) requires payer accounts only.** Linked-account credentials are for member-account APIs, not payer-level billing queries.
 
 Static secrets (API keys, etc.) for other tools live in `~/.config/finops/.env`; AWS sessions use `~/.aws/credentials` profiles.
@@ -202,13 +210,18 @@ finops cost get --account 123456789012 --format csv
 finops cost get --account 123456789012 --split-by service
 finops cost get --account 123456789012 --split-by account
 finops cost get --account 710019948333 --payer rhc   # member account, payer registered; member need not be in config
+finops account list-ous --payer rh-control           # discover OU IDs
+finops cost get --ou ou-abcd-1234 --payer rh-control
+finops cost get --ou ou-abcd-1234 --payer rh-control --ou-direct --days 7
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--account` | One or more comma-separated **12-digit AWS account IDs** (must be registered with `account add`); at least one of `--account` or `--account-alias` is required |
+| `--account` | One or more comma-separated **12-digit AWS account IDs** (must be registered with `account add` unless used with `--payer`); at least one of `--account`, `--account-alias`, or `--ou` is required |
 | `--account-alias` | One or more comma-separated configured aliases (e.g. `rh-control`, or a linked alias such as `quay`) |
-| `--payer` | Registered payer alias when using `--account` for a member account that is not in config (requires `--account`) |
+| `--ou` | One or more comma-separated AWS OU IDs (`ou-xxxx-yyyyy`); requires `--payer`; includes descendant OUs by default |
+| `--ou-direct` | With `--ou`, include only accounts directly in the OU (not child OUs) |
+| `--payer` | Registered payer alias when using `--account` for a member account not in config, or when using `--ou` (requires `--account` or `--ou`) |
 | `--days` | Last N calendar days (mutually exclusive with `--months` and `--from`/`--to`) |
 | `--months` | Last N calendar months from the 1st of the month (mutually exclusive with `--days` and `--from`/`--to`) |
 | `--from` | Start date `YYYY-MM-DD` inclusive (optional `--to`; otherwise through the latest stable day) |
@@ -231,6 +244,7 @@ finops report list
 finops report generate costs --account-alias rh-control
 finops report generate costs --account-alias rh-control -o costs.html
 finops report generate costs --account 710019948333 --payer rhc -o member.html
+finops report generate costs --ou ou-abcd-1234 --payer rh-control -o ou-costs.html
 ```
 
 The **costs** template includes:
@@ -244,9 +258,11 @@ The **costs** template includes:
 |------|-------------|
 | `template` | Positional argument: report template name (run `finops report list` for options) |
 | `--format` | Output format (default: `html`) |
-| `--account` | Comma-separated payer AWS account IDs (at least one of `--account` or `--account-alias` is required) |
+| `--account` | Comma-separated payer AWS account IDs (at least one of `--account`, `--account-alias`, or `--ou` is required) |
 | `--account-alias` | Comma-separated configured aliases |
-| `--payer` | Registered payer alias when using `--account` for a member account that is not in config (requires `--account`) |
+| `--ou` | Comma-separated AWS OU IDs (`ou-xxxx-yyyyy`); requires `--payer`; includes descendant OUs by default |
+| `--ou-direct` | With `--ou`, include only accounts directly in the OU (not child OUs) |
+| `--payer` | Registered payer alias when using `--account` for a member account not in config, or when using `--ou` (requires `--account` or `--ou`) |
 | `--auth-method` | `saml` (default) or `profile` |
 | `--config` | Path to finops config file |
 | `--credentials-file` | Path to AWS credentials file |
