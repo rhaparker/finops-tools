@@ -10,8 +10,9 @@ import (
 type Provider string
 
 const (
-	ProviderAWS Provider = "aws"
-	ProviderGCP Provider = "gcp"
+	ProviderAWS       Provider = "aws"
+	ProviderGCP       Provider = "gcp"
+	ProviderSnowflake Provider = "snowflake"
 )
 
 // ParseProvider parses a provider name (case-insensitive).
@@ -21,7 +22,9 @@ func ParseProvider(s string) (Provider, error) {
 		return ProviderAWS, nil
 	case string(ProviderGCP):
 		return ProviderGCP, nil
+	case string(ProviderSnowflake):
+		return ProviderSnowflake, nil
 	default:
-		return "", fmt.Errorf("unknown provider %q (supported: aws, gcp)", s)
+		return "", fmt.Errorf("unknown provider %q (supported: aws, gcp, snowflake)", s)
 	}
 }

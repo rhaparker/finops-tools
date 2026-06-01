@@ -14,9 +14,10 @@ import (
 // File is the top-level finops configuration.
 type File struct {
 	// Defaults holds fully qualified defaults (e.g. aws.auth_method: profile).
-	Defaults map[string]string `yaml:"defaults,omitempty"`
-	AWS      AWSConfig         `yaml:"aws"`
-	GCP      GCPConfig         `yaml:"gcp,omitempty"`
+	Defaults  map[string]string `yaml:"defaults,omitempty"`
+	AWS       AWSConfig         `yaml:"aws"`
+	GCP       GCPConfig         `yaml:"gcp,omitempty"`
+	Snowflake SnowflakeConfig   `yaml:"snowflake,omitempty"`
 }
 
 // AWSConfig holds AWS-specific settings.
@@ -64,6 +65,9 @@ func Default() File {
 			AccountAliases: make(map[string]AWSAccountAlias),
 		},
 		GCP: GCPConfig{AccountAliases: make(map[string]string)},
+		Snowflake: SnowflakeConfig{
+			AccountAliases: make(map[string]SnowflakeAccount),
+		},
 	}
 }
 
@@ -91,6 +95,9 @@ func Load(path string) (File, error) {
 	}
 	if cfg.GCP.AccountAliases == nil {
 		cfg.GCP.AccountAliases = make(map[string]string)
+	}
+	if cfg.Snowflake.AccountAliases == nil {
+		cfg.Snowflake.AccountAliases = make(map[string]SnowflakeAccount)
 	}
 	cfg.migrateDefaults()
 	cfg.migrateAccountAliases()
@@ -124,6 +131,9 @@ func Save(path string, cfg File) error {
 	}
 	if cfg.GCP.AccountAliases == nil {
 		cfg.GCP.AccountAliases = make(map[string]string)
+	}
+	if cfg.Snowflake.AccountAliases == nil {
+		cfg.Snowflake.AccountAliases = make(map[string]SnowflakeAccount)
 	}
 
 	data, err := yaml.Marshal(cfg)

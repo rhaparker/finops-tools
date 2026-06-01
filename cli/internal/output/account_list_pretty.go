@@ -19,6 +19,17 @@ func writeAWSAccountListPretty(w io.Writer, entries []AccountListRow) error {
 	return writeAWSAccountTable(w, s, entries)
 }
 
+func writeSnowflakeAccountListPretty(w io.Writer, entries []AccountListRow) error {
+	s := newStyler(w)
+	if len(entries) == 0 {
+		return writeAccountListEmpty(w, s, "Snowflake")
+	}
+	if err := writeAccountListSummary(w, s, "Snowflake", entries); err != nil {
+		return err
+	}
+	return writeSnowflakeAccountTable(w, s, entries)
+}
+
 func writeGCPAccountListPretty(w io.Writer, entries []AccountListRow) error {
 	s := newStyler(w)
 	if len(entries) == 0 {
@@ -126,6 +137,38 @@ func writeGCPAccountTable(w io.Writer, s styler, entries []AccountListRow) error
 		table.Append([]string{
 			cell(s, s.bold, e.Alias),
 			e.AccountID,
+		})
+	}
+	table.Render()
+	return nil
+}
+
+func writeSnowflakeAccountTable(w io.Writer, s styler, entries []AccountListRow) error {
+	title := "Snowflake accounts"
+	if s.enabled {
+		title = s.bold(s.cyan(title))
+	}
+	if _, err := fmt.Fprintln(w, title); err != nil {
+		return err
+	}
+
+	table := newAccountTable(w)
+	table.SetHeader([]string{
+		cell(s, s.bold, "ALIAS"),
+		cell(s, s.bold, "ACCOUNT"),
+		cell(s, s.bold, "ROLE"),
+	})
+	table.SetColumnAlignment([]int{
+		tablewriter.ALIGN_LEFT,
+		tablewriter.ALIGN_LEFT,
+		tablewriter.ALIGN_LEFT,
+	})
+
+	for _, e := range entries {
+		table.Append([]string{
+			cell(s, s.bold, e.Alias),
+			e.AccountID,
+			formatOptionalField(s, e.Role),
 		})
 	}
 	table.Render()

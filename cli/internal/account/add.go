@@ -97,6 +97,8 @@ func Add(ctx context.Context, opts AddOptions) (AddResult, error) {
 		})
 	case ProviderGCP:
 		return AddResult{}, fmt.Errorf("%w: gcp", errProviderNotImplemented)
+	case ProviderSnowflake:
+		return AddResult{}, fmt.Errorf("use AddSnowflake for snowflake provider")
 	default:
 		return AddResult{}, fmt.Errorf("unknown provider %q", opts.Provider)
 	}

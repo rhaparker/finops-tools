@@ -28,6 +28,9 @@ Supported names:
   cost.to — default end date YYYY-MM-DD (requires cost.from)
   cost.exclude_recent_days — omit last N UTC days from the cost end anchor (AWS CE lag)
   gcp.auth-method — reserved for future GCP support
+  snowflake.sso_issuer — Red Hat SSO for Snowflake: prod or stage
+  snowflake.oauth_audience — JWT audience for Snowflake OAuth (default: dataverse-snowflake)
+  snowflake.oauth_scopes — comma-separated OAuth scopes (default: omit; use SSO client default scopes)
 
 Example:
   finops config default set --name aws.auth-method --value profile

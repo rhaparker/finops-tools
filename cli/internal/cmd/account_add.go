@@ -8,26 +8,42 @@ import (
 	"github.com/openshift-online/finops-tools/cli/internal/account"
 	awsconfig "github.com/openshift-online/finops-tools/cli/internal/aws"
 	"github.com/openshift-online/finops-tools/cli/internal/awsauth"
+	"github.com/openshift-online/finops-tools/cli/internal/configstore"
 	coreaccount "github.com/openshift-online/finops-tools/core/account"
 	"github.com/spf13/cobra"
 )
 
 var (
-	accountAddForce         bool
-	accountAddAlias         string
-	accountAddPayer         string
-	accountAddRole          string
-	addAccountFn            = account.Add
-	loadAWSAccountProfileFn = awsconfig.LoadSharedConfigProfile
-	detectAWSAccountKindFn  = coreaccount.DetectAccountKind
+	accountAddForce            bool
+	accountAddAlias            string
+	accountAddPayer            string
+	accountAddRole             string
+	accountAddSnowflakeRole    string
+	accountAddSnowflakeWH      string
+	accountAddSnowflakeDB      string
+	accountAddSnowflakeSchema  string
+	accountAddSnowflakeSSO     string
+	accountAddSnowflakeSecrets string
+	addAccountFn               = account.Add
+	addSnowflakeAccountFn      = account.AddSnowflake
+	loadAWSAccountProfileFn    = awsconfig.LoadSharedConfigProfile
+	detectAWSAccountKindFn     = coreaccount.DetectAccountKind
 )
 
 var accountAddCmd = &cobra.Command{
 	Use:   "add <provider> <account>",
-	Short: "Log in and register a payer or linked AWS account",
+	Short: "Log in and register a cloud account",
 	Long: `Log into a cloud account and save it in the finops config file.
 
 For AWS, <account> must be a 12-digit account ID.
+
+For Snowflake, <account> is the Snowflake account identifier (e.g. orgname-accountname).
+OAuth uses Red Hat SSO with a client registered for Dataverse Snowflake. Configure the
+client ID and secret first:
+
+  finops config snowflake oauth set --client-id <id> --client-secret "$SECRET"
+
+See: https://dataverse.pages.redhat.com/platform/snowflake/red-hat-sso-access/
 
 Payer account (Cost Explorer and org billing):
   finops account add aws 123456789012 --alias rh-control
@@ -49,6 +65,9 @@ and the configured auth method (defaults.aws.auth_method or --auth-method).`,
 		provider, err := account.ParseProvider(args[0])
 		if err != nil {
 			return err
+		}
+		if provider == account.ProviderSnowflake {
+			return nil
 		}
 		if provider != account.ProviderAWS {
 			return nil
@@ -79,6 +98,12 @@ func init() {
 	accountAddCmd.Flags().StringVar(&accountAddAlias, "alias", "", "Friendly alias for the account (e.g. rh-control)")
 	accountAddCmd.Flags().StringVar(&accountAddPayer, "payer", "", "Registered payer alias (linked account: assume role in <account> from this payer)")
 	accountAddCmd.Flags().StringVar(&accountAddRole, "role", "", "IAM role name in the linked account (default: config aws.linked_role or OrganizationAccountAccessRole)")
+	accountAddCmd.Flags().StringVar(&accountAddSnowflakeRole, "snowflake-role", "", "Default Snowflake role for the session")
+	accountAddCmd.Flags().StringVar(&accountAddSnowflakeWH, "warehouse", "", "Default Snowflake warehouse")
+	accountAddCmd.Flags().StringVar(&accountAddSnowflakeDB, "database", "", "Default Snowflake database")
+	accountAddCmd.Flags().StringVar(&accountAddSnowflakeSchema, "schema", "", "Default Snowflake schema")
+	accountAddCmd.Flags().StringVar(&accountAddSnowflakeSSO, "sso", "", "Red Hat SSO environment: prod or stage (default: config snowflake.sso_issuer or prod)")
+	accountAddCmd.Flags().StringVar(&accountAddSnowflakeSecrets, "oauth-secrets-file", "", "Path to Snowflake OAuth client secrets file")
 }
 
 func runAccountAdd(cmd *cobra.Command, args []string) error {
@@ -87,6 +112,10 @@ func runAccountAdd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	accountID := args[1]
+
+	if provider == account.ProviderSnowflake {
+		return runAccountAddSnowflake(cmd, accountID)
+	}
 
 	if provider == account.ProviderAWS && strings.TrimSpace(accountAddPayer) != "" {
 		return runAccountAddLinked(cmd, accountID)
@@ -185,6 +214,73 @@ func runAccountAddLinked(cmd *cobra.Command, linkedAccountID string) error {
 	}
 
 	return printAccountAddResult(cmd, res, accountAddAlias, "linked")
+}
+
+func runAccountAddSnowflake(cmd *cobra.Command, accountID string) error {
+	path, err := configstore.ResolvePath(awsFlags.ConfigPath)
+	if err != nil {
+		return err
+	}
+	cfg, err := configstore.Load(path)
+	if err != nil {
+		return err
+	}
+
+	clientID, clientSecret, err := resolveSnowflakeOAuthClient(accountAddSnowflakeSecrets)
+	if err != nil {
+		return err
+	}
+
+	sso := strings.TrimSpace(accountAddSnowflakeSSO)
+	if sso == "" {
+		sso = cfg.SnowflakeSSOIssuer()
+	}
+	oauthCfg, err := snowflakeOAuthConfig(cfg, clientID, clientSecret, sso)
+	if err != nil {
+		return err
+	}
+
+	alias := strings.TrimSpace(accountAddAlias)
+	if alias == "" {
+		alias = accountID
+	}
+
+	res, err := addSnowflakeAccountFn(cmd.Context(), account.AddSnowflakeOptions{
+		Account: account.SnowflakeAccountSettings{
+			Account:   accountID,
+			Role:      accountAddSnowflakeRole,
+			Warehouse: accountAddSnowflakeWH,
+			Database:  accountAddSnowflakeDB,
+			Schema:    accountAddSnowflakeSchema,
+		},
+		Alias:      alias,
+		OAuth:      oauthCfg,
+		ForceLogin: accountAddForce,
+	})
+	if err != nil {
+		return err
+	}
+
+	if err := registerSnowflakeAccount(path, alias, configstore.SnowflakeAccount{
+		Account:   accountID,
+		Role:      accountAddSnowflakeRole,
+		Warehouse: accountAddSnowflakeWH,
+		Database:  accountAddSnowflakeDB,
+		Schema:    accountAddSnowflakeSchema,
+		SSO:       sso,
+	}); err != nil {
+		return err
+	}
+
+	return printAccountAddResult(cmd, res, alias, "snowflake")
+}
+
+func registerSnowflakeAccount(configPath, alias string, acct configstore.SnowflakeAccount) error {
+	path, err := configstore.ResolvePath(configPath)
+	if err != nil {
+		return err
+	}
+	return configstore.RegisterSnowflakeAccount(path, alias, acct)
 }
 
 func buildAWSEnsureOptions(cmd *cobra.Command) (awsauth.EnsureOptions, error) {

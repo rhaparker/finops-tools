@@ -22,7 +22,8 @@ or a linked member account (role assumption from a registered payer).
 Examples:
   finops account list
   finops account list aws
-  finops account list gcp`,
+  finops account list gcp
+  finops account list snowflake`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runAccountList,
 }
@@ -55,6 +56,8 @@ func runAccountList(cmd *cobra.Command, args []string) error {
 		return printAWSAccountList(cmd, cfg)
 	case account.ProviderGCP:
 		return printGCPAccountList(cmd, cfg)
+	case account.ProviderSnowflake:
+		return printSnowflakeAccountList(cmd, cfg)
 	default:
 		return fmt.Errorf("unsupported provider %q", provider)
 	}
@@ -80,6 +83,20 @@ func printGCPAccountList(cmd *cobra.Command, cfg configstore.File) error {
 		})
 	}
 	return output.WriteGCPAccountList(cmd.OutOrStdout(), rows)
+}
+
+func printSnowflakeAccountList(cmd *cobra.Command, cfg configstore.File) error {
+	entries := cfg.ListSnowflakeAccounts()
+	rows := make([]output.AccountListRow, len(entries))
+	for i, e := range entries {
+		rows[i] = output.AccountListRow{
+			Alias:     e.Alias,
+			AccountID: e.Account,
+			Kind:      "snowflake",
+			Role:      e.Role,
+		}
+	}
+	return output.WriteSnowflakeAccountList(cmd.OutOrStdout(), rows)
 }
 
 func awsAccountListRows(entries []configstore.AWSAccountListEntry) []output.AccountListRow {

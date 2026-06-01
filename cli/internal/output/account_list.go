@@ -21,3 +21,8 @@ func WriteAWSAccountList(w io.Writer, entries []AccountListRow) error {
 func WriteGCPAccountList(w io.Writer, entries []AccountListRow) error {
 	return writeGCPAccountListPretty(w, entries)
 }
+
+// WriteSnowflakeAccountList renders registered Snowflake account aliases.
+func WriteSnowflakeAccountList(w io.Writer, entries []AccountListRow) error {
+	return writeSnowflakeAccountListPretty(w, entries)
+}
