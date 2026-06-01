@@ -33,6 +33,17 @@ type ListAccountsInOUOptions struct {
 	Status string
 }
 
+// OrganizationAccountTags is one organization account and its Organizations tags.
+type OrganizationAccountTags struct {
+	Account OrganizationAccount `json:"account"`
+	Tags    []Tag               `json:"tags"`
+}
+
+// TagFilterProgress reports long-running steps while filtering accounts by tag.
+type TagFilterProgress interface {
+	Step(message string)
+}
+
 // AccountKind describes whether a validated account session is payer or linked.
 type AccountKind string
 

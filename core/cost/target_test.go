@@ -21,6 +21,26 @@ func TestAccountTargetCredentialsAccountID(t *testing.T) {
 	}
 }
 
+func TestAccountTargetScopeToAccount(t *testing.T) {
+	payer := AccountTarget{AccountID: "123456789012"}
+	if payer.ScopeToAccount() {
+		t.Fatal("payer without ScopeAccountOnly should not scope to account")
+	}
+
+	payerScoped := AccountTarget{AccountID: "123456789012", ScopeAccountOnly: true}
+	if !payerScoped.ScopeToAccount() {
+		t.Fatal("payer with ScopeAccountOnly should scope to account")
+	}
+
+	selfPayer := AccountTarget{AccountID: "123456789012", PayerAccountID: "123456789012", ScopeAccountOnly: true}
+	if !selfPayer.ScopeToAccount() {
+		t.Fatal("self payer with ScopeAccountOnly should scope to account")
+	}
+	if selfPayer.IsLinked() {
+		t.Fatal("self payer should not be linked")
+	}
+}
+
 func TestFilterOverlappingTargets(t *testing.T) {
 	independent := FilterOverlappingTargets([]AccountTarget{
 		{AccountID: "123456789012"},
@@ -45,4 +65,36 @@ func TestFilterOverlappingTargets(t *testing.T) {
 	if len(overlap) != 1 || overlap[0].AccountID != "123456789012" {
 		t.Fatalf("got %+v, want payer only", overlap)
 	}
+}
+
+func TestReportFetchProgress(t *testing.T) {
+	rec := &recordingFetchProgress{}
+	reportFetchProgress(rec, AccountTarget{AccountID: "111111111111", DisplayName: "Prod"}, 1, 100, SplitByNone)
+	if len(rec.steps) != 1 {
+		t.Fatalf("expected 1 step, got %d", len(rec.steps))
+	}
+
+	recMid := &recordingFetchProgress{}
+	reportFetchProgress(recMid, AccountTarget{AccountID: "111111111111", DisplayName: "Prod"}, 24, 100, SplitByNone)
+	if len(recMid.steps) != 0 {
+		t.Fatalf("expected throttled step at 24, got %d", len(recMid.steps))
+	}
+	reportFetchProgress(recMid, AccountTarget{AccountID: "111111111111", DisplayName: "Prod"}, 25, 100, SplitByNone)
+	if len(recMid.steps) != 1 {
+		t.Fatalf("expected step at 25, got %d", len(recMid.steps))
+	}
+
+	recSingle := &recordingFetchProgress{}
+	reportFetchProgress(recSingle, AccountTarget{AccountID: "111111111111"}, 1, 1, SplitByNone)
+	if len(recSingle.steps) != 0 {
+		t.Fatalf("expected no steps for single account, got %d", len(recSingle.steps))
+	}
+}
+
+type recordingFetchProgress struct {
+	steps []string
+}
+
+func (r *recordingFetchProgress) Step(message string) {
+	r.steps = append(r.steps, message)
 }

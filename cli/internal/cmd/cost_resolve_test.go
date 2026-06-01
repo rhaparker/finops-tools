@@ -6,20 +6,20 @@ import (
 	"github.com/openshift-online/finops-tools/core/cost"
 )
 
-func TestValidateCostTargetSelector(t *testing.T) {
-	if err := validateCostTargetSelector(costTargetSelector{}); err == nil {
+func TestValidateCostTargetSelectorOU(t *testing.T) {
+	if _, err := validateCostTargetSelector(costTargetSelector{}); err == nil {
 		t.Fatal("expected error when no selector provided")
 	}
-	if err := validateCostTargetSelector(costTargetSelector{OUIDs: []string{"ou-abcd-1234"}}); err == nil {
+	if _, err := validateCostTargetSelector(costTargetSelector{OUIDs: []string{"ou-abcd-1234"}}); err == nil {
 		t.Fatal("expected error when --ou without --payer")
 	}
-	if err := validateCostTargetSelector(costTargetSelector{OUDirectOnly: true}); err == nil {
+	if _, err := validateCostTargetSelector(costTargetSelector{OUDirectOnly: true}); err == nil {
 		t.Fatal("expected error when --ou-direct without --ou")
 	}
-	if err := validateCostTargetSelector(costTargetSelector{PayerAlias: "rh-control"}); err == nil {
+	if _, err := validateCostTargetSelector(costTargetSelector{PayerAlias: "rh-control"}); err == nil {
 		t.Fatal("expected error when --payer without --account or --ou")
 	}
-	if err := validateCostTargetSelector(costTargetSelector{
+	if _, err := validateCostTargetSelector(costTargetSelector{
 		OUIDs:      []string{"ou-abcd-1234"},
 		PayerAlias: "rh-control",
 	}); err != nil {

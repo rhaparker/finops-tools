@@ -172,6 +172,59 @@ func TestFetchEmptyAccount(t *testing.T) {
 	}
 }
 
+type fakeCECaptureFilter struct {
+	fakeCE
+	lastFilter *types.Expression
+}
+
+func (f *fakeCECaptureFilter) GetCostAndUsage(
+	ctx context.Context,
+	params *costexplorer.GetCostAndUsageInput,
+	optFns ...func(*costexplorer.Options),
+) (*costexplorer.GetCostAndUsageOutput, error) {
+	f.lastFilter = params.Filter
+	return f.fakeCE.GetCostAndUsage(ctx, params, optFns...)
+}
+
+func TestFetchAWSNetAmortizedScopeAccountOnly(t *testing.T) {
+	now := time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC)
+	ce := &fakeCECaptureFilter{
+		fakeCE: fakeCE{
+			pages: [][]types.ResultByTime{{
+				{Total: map[string]types.MetricValue{
+					MetricNetAmortized: {Amount: aws.String("100"), Unit: aws.String("USD")},
+				}},
+			}},
+		},
+	}
+
+	_, err := fetchAWSNetAmortizedWith(context.Background(), CostQuery{
+		Provider: ProviderAWS,
+		Accounts: []AccountTarget{{
+			AccountID:        "123456789012",
+			PayerAccountID:   "123456789012",
+			ScopeAccountOnly: true,
+			AWSConfig:        aws.Config{},
+		}},
+		Range: LastNDaysRange(30, now),
+	}, fetchAWSOptions{
+		Now:             now,
+		NewCostExplorer: func(aws.Config) CostExplorerAPI { return ce },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ce.lastFilter == nil || ce.lastFilter.Dimensions == nil {
+		t.Fatal("expected linked account filter")
+	}
+	if ce.lastFilter.Dimensions.Key != types.DimensionLinkedAccount {
+		t.Fatalf("filter key = %q", ce.lastFilter.Dimensions.Key)
+	}
+	if len(ce.lastFilter.Dimensions.Values) != 1 || ce.lastFilter.Dimensions.Values[0] != "123456789012" {
+		t.Fatalf("filter values = %v", ce.lastFilter.Dimensions.Values)
+	}
+}
+
 func TestFetchGCPNotImplemented(t *testing.T) {
 	_, err := Fetch(context.Background(), CostQuery{
 		Provider: ProviderGCP,
