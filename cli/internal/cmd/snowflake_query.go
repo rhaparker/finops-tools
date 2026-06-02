@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/openshift-online/finops-tools/cli/internal/configstore"
@@ -22,20 +21,18 @@ var snowflakeQueryCmd = &cobra.Command{
 	Long: `Execute SQL using Red Hat SSO OAuth tokens stored by finops account add snowflake.
 
 Examples:
-  finops snowflake query --account-alias rhprod --sql "SELECT CURRENT_USER(), CURRENT_ROLE()"
-  finops snowflake query --account-alias rhprod --sql "SELECT 1" --format json
-  finops snowflake query --account-alias rhprod --sql "SELECT 1" --format csv`,
+  finops snowflake query --sql "SELECT CURRENT_USER(), CURRENT_ROLE()"
+  finops snowflake query --account-alias sandbox --sql "SELECT 1"
+  finops snowflake query --sql "SELECT 1" --format json`,
 	RunE: runSnowflakeQuery,
 }
 
 func init() {
 	snowflakeCmd.AddCommand(snowflakeQueryCmd)
 	snowflakeQueryCmd.Flags().StringVar(&snowflakeQuerySQL, "sql", "", "SQL statement to execute (required)")
-	snowflakeQueryCmd.Flags().StringVar(&snowflakeFlags.AccountAlias, "account-alias", "", "Registered Snowflake account alias (required)")
 	snowflakeQueryCmd.Flags().StringVar(&snowflakeQueryFormat, "format", string(output.FormatPrettyPrint),
 		"Output format: pretty-print, json, csv")
 	_ = snowflakeQueryCmd.MarkFlagRequired("sql")
-	_ = snowflakeQueryCmd.MarkFlagRequired("account-alias")
 }
 
 func runSnowflakeQuery(cmd *cobra.Command, _ []string) error {
@@ -53,10 +50,9 @@ func runSnowflakeQuery(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	alias := strings.TrimSpace(snowflakeFlags.AccountAlias)
-	acct, ok := cfg.SnowflakeAccountForAlias(alias)
-	if !ok {
-		return fmt.Errorf("unknown snowflake account alias %q", alias)
+	alias, acct, err := cfg.ResolveSnowflakeAccountAlias(snowflakeFlags.AccountAlias)
+	if err != nil {
+		return err
 	}
 
 	tok, err := ensureSnowflakeAccessToken(cmd.Context(), cfg, alias, snowflakeFlags.SecretsPath, snowflakeFlags.TokensPath, acct)

@@ -29,4 +29,6 @@ func bindSnowflakePersistentFlags(cmd *cobra.Command) {
 		"Path to Snowflake OAuth client secrets file")
 	cmd.PersistentFlags().StringVar(&snowflakeFlags.TokensPath, "tokens-file", "",
 		"Path to Snowflake OAuth tokens file")
+	cmd.PersistentFlags().StringVar(&snowflakeFlags.AccountAlias, "account-alias", "",
+		"Registered Snowflake account alias (default: snowflake.account_alias config or first registered account)")
 }

@@ -60,6 +60,7 @@ func (f File) HasSnowflakeAccount(account string) bool {
 }
 
 // RegisterSnowflakeAccount ensures the config file exists and records alias → account.
+// The first registered alias becomes the default snowflake.account_alias when none is set.
 func RegisterSnowflakeAccount(path, alias string, acct SnowflakeAccount) error {
 	cfg, err := Ensure(path)
 	if err != nil {
@@ -72,5 +73,47 @@ func RegisterSnowflakeAccount(path, alias string, acct SnowflakeAccount) error {
 	if err != nil {
 		return err
 	}
+	if _, ok := cfg.Default(DefaultFQNSnowflakeAccountAlias); !ok {
+		cfg, err = cfg.SetDefault(DefaultFQNSnowflakeAccountAlias, alias)
+		if err != nil {
+			return err
+		}
+	}
 	return Save(path, cfg)
+}
+
+// ResolveSnowflakeAccountAlias returns the account for an explicit alias flag, the configured
+// default (snowflake.account_alias), or the sole registered account when only one exists.
+func (f File) ResolveSnowflakeAccountAlias(explicit string) (alias string, acct SnowflakeAccount, err error) {
+	explicit = strings.TrimSpace(explicit)
+	if explicit != "" {
+		acct, ok := f.SnowflakeAccountForAlias(explicit)
+		if !ok {
+			return "", SnowflakeAccount{}, fmt.Errorf("unknown snowflake account alias %q", explicit)
+		}
+		return explicit, acct, nil
+	}
+	if v, ok := f.Default(DefaultFQNSnowflakeAccountAlias); ok {
+		acct, ok := f.SnowflakeAccountForAlias(v)
+		if !ok {
+			return "", SnowflakeAccount{}, fmt.Errorf(
+				"configured default snowflake account alias %q is not registered; run finops config default set --name snowflake.account_alias --value <alias>",
+				v,
+			)
+		}
+		return v, acct, nil
+	}
+	accounts := f.ListSnowflakeAccounts()
+	switch len(accounts) {
+	case 0:
+		return "", SnowflakeAccount{}, fmt.Errorf("no snowflake accounts registered; run finops account add snowflake")
+	case 1:
+		alias = accounts[0].Alias
+		acct, _ = f.SnowflakeAccountForAlias(alias)
+		return alias, acct, nil
+	default:
+		return "", SnowflakeAccount{}, fmt.Errorf(
+			"multiple snowflake accounts registered; pass --account-alias or set finops config default set --name snowflake.account_alias --value <alias>",
+		)
+	}
 }

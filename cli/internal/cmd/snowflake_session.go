@@ -39,7 +39,6 @@ func snowflakeOAuthConfig(cfg configstore.File, clientID, clientSecret, ssoEnv s
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		Audience:     cfg.SnowflakeOAuthAudience(),
-		Scopes:       cfg.SnowflakeOAuthScopes(),
 		Issuer:       issuer,
 	}, nil
 }

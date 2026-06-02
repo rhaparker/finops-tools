@@ -30,7 +30,6 @@ type ClientConfig struct {
 	ClientID     string
 	ClientSecret string
 	Audience     string
-	Scopes       []string
 	Issuer       IssuerURLs
 	RedirectURI  string
 }
@@ -62,11 +61,8 @@ func Login(ctx context.Context, cfg ClientConfig) (TokenSet, error) {
 	if audience == "" {
 		audience = DefaultAudience
 	}
-	// Empty scopes: omit the scope query param so Keycloak uses the client's default
-	// optional scopes (IAM must assign session:role-any there). Requesting scopes not
-	// assigned to the client yields invalid_scope.
-	scopes := cfg.Scopes
-
+	// Omit scope on the authorize request so Keycloak uses the SSO client's default
+	// optional scopes (IAM must assign session:role-any there).
 	redirectURI := strings.TrimSpace(cfg.RedirectURI)
 	if redirectURI == "" {
 		redirectURI = DefaultRedirectURI
@@ -81,7 +77,6 @@ func Login(ctx context.Context, cfg ClientConfig) (TokenSet, error) {
 		ClientID:     cfg.ClientID,
 		ClientSecret: cfg.ClientSecret,
 		RedirectURL:  redirectURI,
-		Scopes:       scopes,
 		Endpoint: oauth2.Endpoint{
 			AuthURL:  cfg.Issuer.AuthorizeURL,
 			TokenURL: cfg.Issuer.TokenURL,

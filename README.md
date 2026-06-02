@@ -148,8 +148,8 @@ Optional defaults:
 ```bash
 finops config default set --name snowflake.sso_issuer --value prod   # or stage (pre-prod Snowflake only)
 finops config default set --name snowflake.oauth_audience --value dataverse-snowflake
-# Only if IAM assigned optional scopes to your client (otherwise omit):
-# finops config default set --name snowflake.oauth_scopes --value openid,session:role-any
+# Override which registered alias finops snowflake uses (first account add sets this automatically):
+# finops config default set --name snowflake.account_alias --value rhprod
 ```
 
 Register a Snowflake account (opens browser for Red Hat SSO, stores refresh token in `~/.config/finops/snowflake-tokens.yaml`):
@@ -162,8 +162,9 @@ finops account add snowflake ORG-ACCOUNT --alias rhprod --force   # re-login
 Run SQL:
 
 ```bash
-finops snowflake query --account-alias rhprod --sql "SELECT CURRENT_USER(), CURRENT_ROLE()"
-finops snowflake query --account-alias rhprod --sql "SELECT 1" --format json
+finops snowflake query --sql "SELECT CURRENT_USER(), CURRENT_ROLE()"
+finops snowflake query --account-alias sandbox --sql "SELECT 1"
+finops snowflake query --sql "SELECT 1" --format json
 ```
 
 Manage AWS Organizations tags on an account (registered alias or 12-digit account ID):

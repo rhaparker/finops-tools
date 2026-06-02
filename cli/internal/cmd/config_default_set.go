@@ -30,7 +30,7 @@ Supported names:
   gcp.auth-method — reserved for future GCP support
   snowflake.sso_issuer — Red Hat SSO for Snowflake: prod or stage
   snowflake.oauth_audience — JWT audience for Snowflake OAuth (default: dataverse-snowflake)
-  snowflake.oauth_scopes — comma-separated OAuth scopes (default: omit; use SSO client default scopes)
+  snowflake.account_alias — default Snowflake account alias for finops snowflake commands (set automatically on first account add)
 
 Example:
   finops config default set --name aws.auth-method --value profile

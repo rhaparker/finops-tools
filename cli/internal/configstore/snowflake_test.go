@@ -26,6 +26,52 @@ func TestRegisterSnowflakeAccount(t *testing.T) {
 	if !ok || got.Account != "ORG-ACCT" || got.Role != "PUBLIC" {
 		t.Fatalf("got %+v ok=%v", got, ok)
 	}
+	defaultAlias, ok := cfg.Default(DefaultFQNSnowflakeAccountAlias)
+	if !ok || defaultAlias != "rhprod" {
+		t.Fatalf("default alias = %q ok=%v, want rhprod", defaultAlias, ok)
+	}
+}
+
+func TestResolveSnowflakeAccountAlias(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+
+	acct := SnowflakeAccount{Account: "ORG-ACCT", Role: "PUBLIC"}
+	if err := RegisterSnowflakeAccount(path, "rhprod", acct); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	alias, got, err := cfg.ResolveSnowflakeAccountAlias("")
+	if err != nil || alias != "rhprod" || got.Account != "ORG-ACCT" {
+		t.Fatalf("default resolve: alias=%q acct=%+v err=%v", alias, got, err)
+	}
+
+	alias, got, err = cfg.ResolveSnowflakeAccountAlias("rhprod")
+	if err != nil || alias != "rhprod" {
+		t.Fatalf("explicit resolve: alias=%q err=%v", alias, err)
+	}
+
+	cfg, err = cfg.SetSnowflakeAlias("sandbox", SnowflakeAccount{Account: "ORG-SBX"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	alias, _, err = cfg.ResolveSnowflakeAccountAlias("")
+	if err != nil || alias != "rhprod" {
+		t.Fatalf("with two accounts default = %q, want rhprod (first registered); err=%v", alias, err)
+	}
+
+	cfg, err = cfg.SetDefault(DefaultFQNSnowflakeAccountAlias, "sandbox")
+	if err != nil {
+		t.Fatal(err)
+	}
+	alias, got, err = cfg.ResolveSnowflakeAccountAlias("")
+	if err != nil || alias != "sandbox" || got.Account != "ORG-SBX" {
+		t.Fatalf("configured default: alias=%q acct=%+v err=%v", alias, got, err)
+	}
 }
 
 func TestResolveSnowflakeOAuthClientUsesDefaultPath(t *testing.T) {
@@ -66,26 +112,6 @@ func TestResolveSnowflakeOAuthClientEmptyFlagUsesDefaultPath(t *testing.T) {
 	}
 	if clientID != "default-path-id" {
 		t.Fatalf("client_id = %q, want default-path-id", clientID)
-	}
-}
-
-func TestSnowflakeOAuthScopesDefault(t *testing.T) {
-	cfg := Default()
-	if scopes := cfg.SnowflakeOAuthScopes(); scopes != nil {
-		t.Fatalf("default scopes = %v, want nil (SSO client defaults)", scopes)
-	}
-}
-
-func TestSnowflakeOAuthScopesFromConfig(t *testing.T) {
-	cfg := Default()
-	var err error
-	cfg, err = cfg.SetDefault(DefaultFQNSnowflakeOAuthScopes, "openid,session:role-any")
-	if err != nil {
-		t.Fatal(err)
-	}
-	scopes := cfg.SnowflakeOAuthScopes()
-	if len(scopes) != 2 || scopes[1] != "session:role-any" {
-		t.Fatalf("got %v", scopes)
 	}
 }
 

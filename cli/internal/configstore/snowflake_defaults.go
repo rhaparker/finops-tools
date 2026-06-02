@@ -11,8 +11,8 @@ const (
 	DefaultFQNSnowflakeSSOIssuer = "snowflake.sso_issuer"
 	// DefaultFQNSnowflakeOAuthAudience is the required JWT audience for Dataverse Snowflake.
 	DefaultFQNSnowflakeOAuthAudience = "snowflake.oauth_audience"
-	// DefaultFQNSnowflakeOAuthScopes is a comma-separated OAuth scope list for Red Hat SSO login.
-	DefaultFQNSnowflakeOAuthScopes = "snowflake.oauth_scopes"
+	// DefaultFQNSnowflakeAccountAlias is the default registered Snowflake account alias for snowflake commands.
+	DefaultFQNSnowflakeAccountAlias = "snowflake.account_alias"
 )
 
 const (
@@ -34,8 +34,10 @@ func validateSnowflakeDefaultValue(fqn, value string) error {
 			return fmt.Errorf("snowflake.oauth_audience cannot be empty")
 		}
 		return nil
-	case DefaultFQNSnowflakeOAuthScopes:
-		// Empty value is allowed: use SSO client default scopes only.
+	case DefaultFQNSnowflakeAccountAlias:
+		if strings.TrimSpace(value) == "" {
+			return fmt.Errorf("snowflake.account_alias cannot be empty")
+		}
 		return nil
 	default:
 		return fmt.Errorf("unknown snowflake default %q", fqn)
@@ -56,27 +58,4 @@ func (f File) SnowflakeOAuthAudience() string {
 		return strings.TrimSpace(v)
 	}
 	return defaultSnowflakeOAuthAudience
-}
-
-// SnowflakeOAuthScopes returns OAuth scopes to request from Red Hat SSO.
-// When unset, returns nil so the authorize request omits scope and the SSO client
-// default scopes apply.
-func (f File) SnowflakeOAuthScopes() []string {
-	v, ok := f.Default(DefaultFQNSnowflakeOAuthScopes)
-	if !ok || strings.TrimSpace(v) == "" {
-		return nil
-	}
-	return parseSnowflakeOAuthScopes(v)
-}
-
-func parseSnowflakeOAuthScopes(value string) []string {
-	parts := strings.Split(value, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
 }
