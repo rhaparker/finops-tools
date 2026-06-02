@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -11,6 +12,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/organizations"
 	"github.com/aws/aws-sdk-go-v2/service/organizations/types"
 )
+
+var ouIDPattern = regexp.MustCompile(`^ou-[0-9a-z]{4,32}-[0-9a-z]{4,32}$`)
 
 // ListTags returns AWS Organizations tags for accountID.
 func ListTags(ctx context.Context, cfg aws.Config, accountID string) ([]Tag, error) {
@@ -175,6 +178,186 @@ func ListOrganizationAccounts(ctx context.Context, cfg aws.Config) ([]Organizati
 		token = resp.NextToken
 	}
 	return out, nil
+}
+
+// ListOrganizationalUnits returns child OUs under parentID.
+// When parentID is empty, the organization root is used.
+func ListOrganizationalUnits(ctx context.Context, cfg aws.Config, parentID string) ([]OrganizationalUnit, error) {
+	return listOrganizationalUnitsWithClient(ctx, newOrganizationsClient(cfg), parentID)
+}
+
+func listOrganizationalUnitsWithClient(ctx context.Context, client OrganizationsAPI, parentID string) ([]OrganizationalUnit, error) {
+	parentID = strings.TrimSpace(parentID)
+	if parentID == "" {
+		rootID, err := firstRootID(ctx, client)
+		if err != nil {
+			return nil, err
+		}
+		parentID = rootID
+	}
+
+	var token *string
+	out := make([]OrganizationalUnit, 0)
+	for {
+		resp, err := client.ListOrganizationalUnitsForParent(ctx, &organizations.ListOrganizationalUnitsForParentInput{
+			ParentId:  aws.String(parentID),
+			NextToken: token,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list organizational units for parent %s: %w", parentID, err)
+		}
+		for _, ou := range resp.OrganizationalUnits {
+			id := strings.TrimSpace(aws.ToString(ou.Id))
+			name := strings.TrimSpace(aws.ToString(ou.Name))
+			if id == "" {
+				continue
+			}
+			out = append(out, OrganizationalUnit{ID: id, Name: name})
+		}
+		if resp.NextToken == nil || aws.ToString(resp.NextToken) == "" {
+			break
+		}
+		token = resp.NextToken
+	}
+
+	slices.SortFunc(out, func(a, b OrganizationalUnit) int {
+		if cmp := strings.Compare(a.Name, b.Name); cmp != 0 {
+			return cmp
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
+	return out, nil
+}
+
+// ListAccountsInOU returns active accounts in an OU, recursively by default.
+func ListAccountsInOU(ctx context.Context, cfg aws.Config, ouID string, opts ListAccountsInOUOptions) ([]OrganizationAccount, error) {
+	return listAccountsInOUWithClient(ctx, newOrganizationsClient(cfg), ouID, opts)
+}
+
+func listAccountsInOUWithClient(ctx context.Context, client OrganizationsAPI, ouID string, opts ListAccountsInOUOptions) ([]OrganizationAccount, error) {
+	ouID = strings.TrimSpace(ouID)
+	if err := validateOUID(ouID); err != nil {
+		return nil, err
+	}
+
+	statusFilter := strings.TrimSpace(opts.Status)
+	if statusFilter == "" {
+		statusFilter = string(types.AccountStatusActive)
+	}
+
+	seen := make(map[string]struct{})
+	out := make([]OrganizationAccount, 0)
+
+	collectAccounts := func(parentID string) error {
+		accounts, err := listAccountsForParentWithClient(ctx, client, parentID, statusFilter)
+		if err != nil {
+			return err
+		}
+		for _, acct := range accounts {
+			if _, ok := seen[acct.ID]; ok {
+				continue
+			}
+			seen[acct.ID] = struct{}{}
+			out = append(out, acct)
+		}
+		return nil
+	}
+
+	if opts.DirectOnly {
+		if err := collectAccounts(ouID); err != nil {
+			return nil, err
+		}
+		return out, nil
+	}
+
+	queue := []string{ouID}
+	for len(queue) > 0 {
+		parentID := queue[0]
+		queue = queue[1:]
+
+		if err := collectAccounts(parentID); err != nil {
+			return nil, err
+		}
+
+		childOUs, err := listOrganizationalUnitsWithClient(ctx, client, parentID)
+		if err != nil {
+			return nil, err
+		}
+		for _, child := range childOUs {
+			queue = append(queue, child.ID)
+		}
+	}
+
+	slices.SortFunc(out, func(a, b OrganizationAccount) int {
+		if cmp := strings.Compare(a.Name, b.Name); cmp != 0 {
+			return cmp
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
+	return out, nil
+}
+
+func listAccountsForParentWithClient(ctx context.Context, client OrganizationsAPI, parentID, statusFilter string) ([]OrganizationAccount, error) {
+	var token *string
+	out := make([]OrganizationAccount, 0)
+	for {
+		resp, err := client.ListAccountsForParent(ctx, &organizations.ListAccountsForParentInput{
+			ParentId:  aws.String(parentID),
+			NextToken: token,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list accounts for parent %s: %w", parentID, err)
+		}
+		for _, acct := range resp.Accounts {
+			if statusFilter != "" && string(acct.Status) != statusFilter {
+				continue
+			}
+			name, err := accountNameFromOrganizationAccount(&acct, aws.ToString(acct.Id))
+			if err != nil {
+				continue
+			}
+			out = append(out, OrganizationAccount{
+				ID:   strings.TrimSpace(aws.ToString(acct.Id)),
+				Name: name,
+			})
+		}
+		if resp.NextToken == nil || aws.ToString(resp.NextToken) == "" {
+			break
+		}
+		token = resp.NextToken
+	}
+	return out, nil
+}
+
+func firstRootID(ctx context.Context, client OrganizationsAPI) (string, error) {
+	var token *string
+	for {
+		resp, err := client.ListRoots(ctx, &organizations.ListRootsInput{NextToken: token})
+		if err != nil {
+			return "", fmt.Errorf("list organization roots: %w", err)
+		}
+		for _, root := range resp.Roots {
+			id := strings.TrimSpace(aws.ToString(root.Id))
+			if id != "" {
+				return id, nil
+			}
+		}
+		if resp.NextToken == nil || aws.ToString(resp.NextToken) == "" {
+			break
+		}
+		token = resp.NextToken
+	}
+	return "", fmt.Errorf("list organization roots: no root found")
+}
+
+func validateOUID(ouID string) error {
+	if ouID == "" {
+		return fmt.Errorf("OU ID is required")
+	}
+	if !ouIDPattern.MatchString(ouID) {
+		return fmt.Errorf("invalid OU ID %q (expected format ou-xxxx-yyyyy)", ouID)
+	}
+	return nil
 }
 
 // DetectAccountKind classifies callerAccountID against organization management account.

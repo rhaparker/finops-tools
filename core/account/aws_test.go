@@ -76,6 +76,30 @@ func (f fakeOrganizations) DescribeOrganization(
 	return nil, errors.New("not implemented")
 }
 
+func (f fakeOrganizations) ListRoots(
+	_ context.Context,
+	_ *organizations.ListRootsInput,
+	_ ...func(*organizations.Options),
+) (*organizations.ListRootsOutput, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f fakeOrganizations) ListOrganizationalUnitsForParent(
+	_ context.Context,
+	_ *organizations.ListOrganizationalUnitsForParentInput,
+	_ ...func(*organizations.Options),
+) (*organizations.ListOrganizationalUnitsForParentOutput, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f fakeOrganizations) ListAccountsForParent(
+	_ context.Context,
+	_ *organizations.ListAccountsForParentInput,
+	_ ...func(*organizations.Options),
+) (*organizations.ListAccountsForParentOutput, error) {
+	return nil, errors.New("not implemented")
+}
+
 type fakeOrganizationsTags struct {
 	pages []*organizations.ListTagsForResourceOutput
 	err   error
@@ -122,6 +146,30 @@ func (f *fakeOrganizationsTags) DescribeOrganization(
 	return nil, errors.New("not implemented")
 }
 
+func (f *fakeOrganizationsTags) ListRoots(
+	_ context.Context,
+	_ *organizations.ListRootsInput,
+	_ ...func(*organizations.Options),
+) (*organizations.ListRootsOutput, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *fakeOrganizationsTags) ListOrganizationalUnitsForParent(
+	_ context.Context,
+	_ *organizations.ListOrganizationalUnitsForParentInput,
+	_ ...func(*organizations.Options),
+) (*organizations.ListOrganizationalUnitsForParentOutput, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *fakeOrganizationsTags) ListAccountsForParent(
+	_ context.Context,
+	_ *organizations.ListAccountsForParentInput,
+	_ ...func(*organizations.Options),
+) (*organizations.ListAccountsForParentOutput, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (f *fakeOrganizationsTags) ListTagsForAccount(
 	ctx context.Context,
 	_ string,
@@ -162,6 +210,30 @@ func (f fakeDescribeOrganizationClient) DescribeOrganization(
 		return nil, f.err
 	}
 	return f.output, nil
+}
+
+func (f fakeDescribeOrganizationClient) ListRoots(
+	_ context.Context,
+	_ *organizations.ListRootsInput,
+	_ ...func(*organizations.Options),
+) (*organizations.ListRootsOutput, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f fakeDescribeOrganizationClient) ListOrganizationalUnitsForParent(
+	_ context.Context,
+	_ *organizations.ListOrganizationalUnitsForParentInput,
+	_ ...func(*organizations.Options),
+) (*organizations.ListOrganizationalUnitsForParentOutput, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f fakeDescribeOrganizationClient) ListAccountsForParent(
+	_ context.Context,
+	_ *organizations.ListAccountsForParentInput,
+	_ ...func(*organizations.Options),
+) (*organizations.ListAccountsForParentOutput, error) {
+	return nil, errors.New("not implemented")
 }
 
 func (f fakeDescribeOrganizationClient) DescribeAccount(
@@ -260,6 +332,30 @@ func (f *fakeOrganizationsTagMutator) DescribeOrganization(
 	_ *organizations.DescribeOrganizationInput,
 	_ ...func(*organizations.Options),
 ) (*organizations.DescribeOrganizationOutput, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *fakeOrganizationsTagMutator) ListRoots(
+	_ context.Context,
+	_ *organizations.ListRootsInput,
+	_ ...func(*organizations.Options),
+) (*organizations.ListRootsOutput, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *fakeOrganizationsTagMutator) ListOrganizationalUnitsForParent(
+	_ context.Context,
+	_ *organizations.ListOrganizationalUnitsForParentInput,
+	_ ...func(*organizations.Options),
+) (*organizations.ListOrganizationalUnitsForParentOutput, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *fakeOrganizationsTagMutator) ListAccountsForParent(
+	_ context.Context,
+	_ *organizations.ListAccountsForParentInput,
+	_ ...func(*organizations.Options),
+) (*organizations.ListAccountsForParentOutput, error) {
 	return nil, errors.New("not implemented")
 }
 
@@ -468,4 +564,188 @@ func organizationWithManagementAccountID(accountID string) *types.Organization {
 	}
 	org.Id = aws.String(accountID)
 	return org
+}
+
+type fakeOUHierarchy struct {
+	roots            []string
+	childOUs         map[string][]OrganizationalUnit
+	accountsByParent map[string][]types.Account
+}
+
+func (f fakeOUHierarchy) DescribeAccount(
+	_ context.Context,
+	params *organizations.DescribeAccountInput,
+	_ ...func(*organizations.Options),
+) (*organizations.DescribeAccountOutput, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f fakeOUHierarchy) ListAccounts(
+	_ context.Context,
+	_ *organizations.ListAccountsInput,
+	_ ...func(*organizations.Options),
+) (*organizations.ListAccountsOutput, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f fakeOUHierarchy) ListTagsForAccount(
+	_ context.Context,
+	_ string,
+	_ *string,
+) ([]Tag, *string, error) {
+	return nil, nil, errors.New("not implemented")
+}
+
+func (f fakeOUHierarchy) SetAccountTag(
+	_ context.Context,
+	_, _, _ string,
+) error {
+	return errors.New("not implemented")
+}
+
+func (f fakeOUHierarchy) DescribeOrganization(
+	_ context.Context,
+	_ *organizations.DescribeOrganizationInput,
+	_ ...func(*organizations.Options),
+) (*organizations.DescribeOrganizationOutput, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f fakeOUHierarchy) ListRoots(
+	_ context.Context,
+	_ *organizations.ListRootsInput,
+	_ ...func(*organizations.Options),
+) (*organizations.ListRootsOutput, error) {
+	roots := make([]types.Root, 0, len(f.roots))
+	for _, id := range f.roots {
+		roots = append(roots, types.Root{Id: aws.String(id), Name: aws.String("Root")})
+	}
+	return &organizations.ListRootsOutput{Roots: roots}, nil
+}
+
+func (f fakeOUHierarchy) ListOrganizationalUnitsForParent(
+	_ context.Context,
+	params *organizations.ListOrganizationalUnitsForParentInput,
+	_ ...func(*organizations.Options),
+) (*organizations.ListOrganizationalUnitsForParentOutput, error) {
+	parentID := aws.ToString(params.ParentId)
+	children := f.childOUs[parentID]
+	out := make([]types.OrganizationalUnit, 0, len(children))
+	for _, ou := range children {
+		out = append(out, types.OrganizationalUnit{
+			Id:   aws.String(ou.ID),
+			Name: aws.String(ou.Name),
+		})
+	}
+	return &organizations.ListOrganizationalUnitsForParentOutput{OrganizationalUnits: out}, nil
+}
+
+func (f fakeOUHierarchy) ListAccountsForParent(
+	_ context.Context,
+	params *organizations.ListAccountsForParentInput,
+	_ ...func(*organizations.Options),
+) (*organizations.ListAccountsForParentOutput, error) {
+	parentID := aws.ToString(params.ParentId)
+	return &organizations.ListAccountsForParentOutput{Accounts: f.accountsByParent[parentID]}, nil
+}
+
+func testOUHierarchy() fakeOUHierarchy {
+	return fakeOUHierarchy{
+		roots: []string{"r-root"},
+		childOUs: map[string][]OrganizationalUnit{
+			"r-root": {
+				{ID: "ou-root-prod", Name: "Production"},
+				{ID: "ou-root-sandbox", Name: "Sandbox"},
+			},
+			"ou-root-prod": {
+				{ID: "ou-prod-team-a", Name: "Team A"},
+			},
+		},
+		accountsByParent: map[string][]types.Account{
+			"ou-root-prod": {
+				{Id: aws.String("111111111111"), Name: aws.String("Prod One"), Status: types.AccountStatusActive},
+				{Id: aws.String("222222222222"), Name: aws.String("Prod Two"), Status: types.AccountStatusActive},
+			},
+			"ou-prod-team-a": {
+				{Id: aws.String("333333333333"), Name: aws.String("Team A One"), Status: types.AccountStatusActive},
+			},
+			"ou-root-sandbox": {
+				{Id: aws.String("444444444444"), Name: aws.String("Sandbox One"), Status: types.AccountStatusActive},
+				{Id: aws.String("555555555555"), Name: aws.String("Suspended"), Status: types.AccountStatusSuspended},
+			},
+		},
+	}
+}
+
+func TestValidateOUID(t *testing.T) {
+	if err := validateOUID("ou-abcd-1234"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := validateOUID(""); err == nil {
+		t.Fatal("expected error for empty OU ID")
+	}
+	if err := validateOUID("r-root"); err == nil {
+		t.Fatal("expected error for root ID")
+	}
+}
+
+func TestListOrganizationalUnitsWithClient(t *testing.T) {
+	client := testOUHierarchy()
+	ous, err := listOrganizationalUnitsWithClient(context.Background(), client, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ous) != 2 || ous[0].Name != "Production" || ous[1].Name != "Sandbox" {
+		t.Fatalf("ous = %+v", ous)
+	}
+
+	childOUs, err := listOrganizationalUnitsWithClient(context.Background(), client, "ou-root-prod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(childOUs) != 1 || childOUs[0].ID != "ou-prod-team-a" {
+		t.Fatalf("childOUs = %+v", childOUs)
+	}
+}
+
+func TestListAccountsInOUDirectOnly(t *testing.T) {
+	client := testOUHierarchy()
+	accounts, err := listAccountsInOUWithClient(context.Background(), client, "ou-root-prod", ListAccountsInOUOptions{DirectOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(accounts) != 2 {
+		t.Fatalf("accounts = %+v", accounts)
+	}
+}
+
+func TestListAccountsInOURecursive(t *testing.T) {
+	client := testOUHierarchy()
+	accounts, err := listAccountsInOUWithClient(context.Background(), client, "ou-root-prod", ListAccountsInOUOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(accounts) != 3 {
+		t.Fatalf("accounts = %+v", accounts)
+	}
+	ids := map[string]struct{}{}
+	for _, acct := range accounts {
+		ids[acct.ID] = struct{}{}
+	}
+	for _, want := range []string{"111111111111", "222222222222", "333333333333"} {
+		if _, ok := ids[want]; !ok {
+			t.Fatalf("missing account %s in %+v", want, accounts)
+		}
+	}
+}
+
+func TestListAccountsInOUSkipsSuspended(t *testing.T) {
+	client := testOUHierarchy()
+	accounts, err := listAccountsInOUWithClient(context.Background(), client, "ou-root-sandbox", ListAccountsInOUOptions{DirectOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(accounts) != 1 || accounts[0].ID != "444444444444" {
+		t.Fatalf("accounts = %+v", accounts)
+	}
 }

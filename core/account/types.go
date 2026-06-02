@@ -19,6 +19,20 @@ type OrganizationAccount struct {
 	Name string `json:"name"`
 }
 
+// OrganizationalUnit is one AWS Organizations OU directory entry.
+type OrganizationalUnit struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// ListAccountsInOUOptions configures ListAccountsInOU.
+type ListAccountsInOUOptions struct {
+	// DirectOnly lists accounts directly in ouID only (not descendant OUs).
+	DirectOnly bool
+	// Status filters accounts by Organizations status (default ACTIVE).
+	Status string
+}
+
 // AccountKind describes whether a validated account session is payer or linked.
 type AccountKind string
 
