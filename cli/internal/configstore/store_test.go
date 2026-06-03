@@ -128,11 +128,11 @@ func TestResolveCostTargetsAdHocLinked(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	targets, err := ResolveCostTargets(cfg, []string{"710019948333"}, nil, "rhc")
+	targets, err := ResolveCostTargets(cfg, []string{"333333333333"}, nil, "rhc")
 	if err != nil || len(targets) != 1 {
 		t.Fatalf("targets: %+v %v", targets, err)
 	}
-	if targets[0].AccountID != "710019948333" || targets[0].PayerAccountID != "123456789012" {
+	if targets[0].AccountID != "333333333333" || targets[0].PayerAccountID != "123456789012" {
 		t.Fatalf("target = %+v", targets[0])
 	}
 }

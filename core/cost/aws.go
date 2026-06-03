@@ -37,12 +37,8 @@ type fetchAWSOptions struct {
 
 func fetchAWSNetAmortized(ctx context.Context, q CostQuery) (CostResult, error) {
 	opts := fetchAWSOptions{
-		Now: time.Now(),
-		NewCostExplorer: func(cfg aws.Config) CostExplorerAPI {
-			return costexplorer.NewFromConfig(cfg, func(o *costexplorer.Options) {
-				o.Region = costExplorerRegion
-			})
-		},
+		Now:             time.Now(),
+		NewCostExplorer: defaultCostExplorerFactory(),
 	}
 	if q.AWSFetch != nil {
 		opts.ListAccountNames = q.AWSFetch.ListAccountNames
@@ -56,11 +52,7 @@ func fetchAWSNetAmortizedWith(ctx context.Context, q CostQuery, opts fetchAWSOpt
 		opts.Now = time.Now()
 	}
 	if opts.NewCostExplorer == nil {
-		opts.NewCostExplorer = func(cfg aws.Config) CostExplorerAPI {
-			return costexplorer.NewFromConfig(cfg, func(o *costexplorer.Options) {
-				o.Region = costExplorerRegion
-			})
-		}
+		opts.NewCostExplorer = defaultCostExplorerFactory()
 	}
 
 	acct := q.Accounts[0]
@@ -72,7 +64,7 @@ func fetchAWSNetAmortizedWith(ctx context.Context, q CostQuery, opts fetchAWSOpt
 
 	dr := EffectiveRange(q, opts.Now)
 	ce := opts.NewCostExplorer(cfg)
-	filter := linkedAccountFilter(accountID, acct.IsLinked())
+	filter := linkedAccountFilter(accountID, acct.ScopeToAccount())
 
 	var (
 		amount    float64
@@ -320,12 +312,8 @@ func sumNetAmortizedGrouped(
 
 func fetchAWSDailyNetAmortized(ctx context.Context, q CostQuery) ([]DailyCostItem, string, error) {
 	opts := fetchAWSOptions{
-		Now: time.Now(),
-		NewCostExplorer: func(cfg aws.Config) CostExplorerAPI {
-			return costexplorer.NewFromConfig(cfg, func(o *costexplorer.Options) {
-				o.Region = costExplorerRegion
-			})
-		},
+		Now:             time.Now(),
+		NewCostExplorer: defaultCostExplorerFactory(),
 	}
 	return fetchAWSDailyNetAmortizedWith(ctx, q, opts)
 }
@@ -335,11 +323,7 @@ func fetchAWSDailyNetAmortizedWith(ctx context.Context, q CostQuery, opts fetchA
 		opts.Now = time.Now()
 	}
 	if opts.NewCostExplorer == nil {
-		opts.NewCostExplorer = func(cfg aws.Config) CostExplorerAPI {
-			return costexplorer.NewFromConfig(cfg, func(o *costexplorer.Options) {
-				o.Region = costExplorerRegion
-			})
-		}
+		opts.NewCostExplorer = defaultCostExplorerFactory()
 	}
 
 	acct := q.Accounts[0]
@@ -350,8 +334,16 @@ func fetchAWSDailyNetAmortizedWith(ctx context.Context, q CostQuery, opts fetchA
 
 	dr := EffectiveRange(q, opts.Now)
 	ce := opts.NewCostExplorer(cfg)
-	filter := linkedAccountFilter(acct.AccountID, acct.IsLinked())
+	filter := linkedAccountFilter(acct.AccountID, acct.ScopeToAccount())
 	return sumNetAmortizedDaily(ctx, ce, dr, filter)
+}
+
+func defaultCostExplorerFactory() func(aws.Config) CostExplorerAPI {
+	return func(cfg aws.Config) CostExplorerAPI {
+		return costexplorer.NewFromConfig(cfg, func(o *costexplorer.Options) {
+			o.Region = costExplorerRegion
+		})
+	}
 }
 
 func sumNetAmortizedDaily(ctx context.Context, ce CostExplorerAPI, dr DateRange, filter *types.Expression) ([]DailyCostItem, string, error) {

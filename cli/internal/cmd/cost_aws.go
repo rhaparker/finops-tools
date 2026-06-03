@@ -17,7 +17,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func ensureCostCredentials(
+var ensureCostCredentials = ensureCostCredentialsImpl
+
+func ensureCostCredentialsImpl(
 	ctx context.Context,
 	cmd *cobra.Command,
 	cfg configstore.File,
@@ -55,9 +57,12 @@ func prepareCostTargets(
 	store configstore.File,
 	targets []cost.AccountTarget,
 	credentialsFile string,
+	status costStepper,
 ) ([]cost.AccountTarget, error) {
 	credConfigs := make(map[string]aws.Config)
+	total := len(targets)
 	for i := range targets {
+		reportPrepareProgress(status, i+1, total)
 		credID := targets[i].CredentialsAccountID()
 		if awsCfg, ok := credConfigs[credID]; ok {
 			targets[i].AWSConfig = awsCfg
@@ -81,7 +86,16 @@ func prepareCostTargets(
 	return targets, nil
 }
 
-func loadAWSConfigForCredentialsAccount(
+func reportPrepareProgress(status costStepper, index, total int) {
+	if status == nil || total <= 1 || !shouldReportIndexedProgress(index, total) {
+		return
+	}
+	status.Step(fmt.Sprintf("Preparing account configuration (%d/%d)…", index, total))
+}
+
+var loadAWSConfigForCredentialsAccount = loadAWSConfigForCredentialsAccountImpl
+
+func loadAWSConfigForCredentialsAccountImpl(
 	ctx context.Context,
 	store configstore.File,
 	credentialsAccountID,
@@ -118,6 +132,9 @@ func enrichCostTargetDisplayName(
 ) error {
 	accountID := strings.TrimSpace(target.AccountID)
 	if accountID == "" {
+		return nil
+	}
+	if strings.TrimSpace(target.DisplayName) != "" {
 		return nil
 	}
 

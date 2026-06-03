@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 )
@@ -73,6 +74,11 @@ type AWSFetchOptions struct {
 	ResolveAccountNames ResolveAWSAccountNamesFunc
 }
 
+// FetchProgress reports long-running steps while fetching costs.
+type FetchProgress interface {
+	Step(message string)
+}
+
 // CostQuery describes a cost fetch request.
 type CostQuery struct {
 	Provider Provider
@@ -80,6 +86,7 @@ type CostQuery struct {
 	Range    DateRange
 	SplitBy  SplitBy
 	AWSFetch *AWSFetchOptions
+	Progress FetchProgress
 }
 
 // AccountTarget identifies an AWS account whose costs are fetched.
@@ -94,6 +101,8 @@ type AccountTarget struct {
 	DisplayName string
 	// DisplayAlias is the configured finops alias when the target was selected by alias.
 	DisplayAlias string
+	// ScopeAccountOnly forces a LINKED_ACCOUNT CE filter even when the target is the payer account.
+	ScopeAccountOnly bool
 }
 
 // CredentialsAccountID returns the account ID whose credentials are in AWSConfig.
@@ -102,6 +111,11 @@ func (t AccountTarget) CredentialsAccountID() string {
 		return id
 	}
 	return strings.TrimSpace(t.AccountID)
+}
+
+// ScopeToAccount reports whether Cost Explorer should filter to AccountID only.
+func (t AccountTarget) ScopeToAccount() bool {
+	return t.IsLinked() || t.ScopeAccountOnly
 }
 
 // IsLinked reports whether costs are scoped to a linked (member) account.
@@ -163,14 +177,45 @@ type CostResult struct {
 	Linked bool `json:"linked,omitempty"`
 }
 
+// EmptyResult is a zero-amount summary for a period when no accounts were selected.
+func EmptyResult(provider Provider, dr DateRange, splitBy SplitBy) CostResult {
+	endInclusive := dr.End.AddDate(0, 0, -1)
+	return CostResult{
+		Provider:  provider,
+		Metric:    MetricNetAmortized,
+		SplitBy:   splitBy,
+		StartDate: formatDate(dr.Start),
+		EndDate:   formatDate(endInclusive),
+	}
+}
+
 // Fetch retrieves cost data for one or more accounts and returns a combined summary.
 func Fetch(ctx context.Context, q CostQuery) (CostResult, error) {
 	if len(q.Accounts) == 0 {
 		return CostResult{}, errors.New("at least one account is required")
 	}
 	targets := FilterOverlappingTargets(q.Accounts)
+
+	if _, ok := planBulkFetch(targets); ok {
+		reportBulkFetchProgress(q.Progress, len(targets), q.SplitBy)
+		switch q.Provider {
+		case ProviderAWS, "":
+			opts := fetchAWSOptions{Now: time.Now()}
+			if q.AWSFetch != nil {
+				opts.ListAccountNames = q.AWSFetch.ListAccountNames
+				opts.ResolveAccountNames = q.AWSFetch.ResolveAccountNames
+			}
+			return fetchAWSNetAmortizedBulk(ctx, q, targets, opts)
+		case ProviderGCP:
+			return CostResult{}, fmt.Errorf("%w: gcp", errProviderNotImplemented)
+		default:
+			return CostResult{}, fmt.Errorf("unknown provider %q", q.Provider)
+		}
+	}
+
 	results := make([]CostResult, 0, len(targets))
-	for _, acct := range targets {
+	for i, acct := range targets {
+		reportFetchProgress(q.Progress, acct, i+1, len(targets), q.SplitBy)
 		single := q
 		single.Accounts = []AccountTarget{acct}
 
@@ -200,9 +245,15 @@ func FetchDaily(ctx context.Context, q CostQuery) ([]DailyCostItem, string, erro
 	switch q.Provider {
 	case ProviderAWS, "":
 		targets := FilterOverlappingTargets(q.Accounts)
+		if _, ok := planBulkFetch(targets); ok {
+			reportBulkFetchProgress(q.Progress, len(targets), SplitByNone)
+			opts := fetchAWSOptions{Now: time.Now()}
+			return fetchAWSDailyNetAmortizedBulk(ctx, q, targets, opts)
+		}
 		series := make([][]DailyCostItem, 0, len(targets))
 		var currency string
-		for _, acct := range targets {
+		for i, acct := range targets {
+			reportFetchProgress(q.Progress, acct, i+1, len(targets), SplitByNone)
 			single := q
 			single.Accounts = []AccountTarget{acct}
 			daily, cur, err := fetchAWSDailyNetAmortized(ctx, single)
@@ -222,4 +273,54 @@ func FetchDaily(ctx context.Context, q CostQuery) ([]DailyCostItem, string, erro
 	default:
 		return nil, "", fmt.Errorf("unknown provider %q", q.Provider)
 	}
+}
+
+func reportBulkFetchProgress(progress FetchProgress, accountCount int, splitBy SplitBy) {
+	if progress == nil || accountCount <= 1 {
+		return
+	}
+	switch splitBy {
+	case SplitByService:
+		progress.Step(fmt.Sprintf("Fetching costs by service for %d account(s) in batched Cost Explorer queries…", accountCount))
+	default:
+		progress.Step(fmt.Sprintf("Fetching costs for %d account(s) in one bulk Cost Explorer query…", accountCount))
+	}
+}
+
+func reportFetchProgress(progress FetchProgress, acct AccountTarget, index, total int, splitBy SplitBy) {
+	if progress == nil || total <= 1 || !shouldReportFetchProgress(index, total) {
+		return
+	}
+	label := targetProgressLabel(acct)
+	switch splitBy {
+	case SplitByService:
+		progress.Step(fmt.Sprintf("Fetching costs by service for %s [%d/%d]…", label, index, total))
+	case SplitByAccount:
+		progress.Step(fmt.Sprintf("Fetching costs for %s [%d/%d]…", label, index, total))
+	default:
+		progress.Step(fmt.Sprintf("Fetching costs for %s [%d/%d]…", label, index, total))
+	}
+}
+
+func shouldReportFetchProgress(index, total int) bool {
+	if total <= 1 {
+		return false
+	}
+	if index == 1 || index == total {
+		return true
+	}
+	if total <= 10 {
+		return true
+	}
+	return index%25 == 0
+}
+
+func targetProgressLabel(acct AccountTarget) string {
+	if name := strings.TrimSpace(acct.DisplayName); name != "" {
+		return fmt.Sprintf("%s (%s)", name, acct.AccountID)
+	}
+	if alias := strings.TrimSpace(acct.DisplayAlias); alias != "" {
+		return fmt.Sprintf("%s (%s)", alias, acct.AccountID)
+	}
+	return acct.AccountID
 }

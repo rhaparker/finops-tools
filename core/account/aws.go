@@ -152,9 +152,106 @@ func resolveAccountNamesWithClient(ctx context.Context, client OrganizationsAPI,
 	return out, nil
 }
 
-// ListOrganizationAccounts returns all organization accounts.
-func ListOrganizationAccounts(ctx context.Context, cfg aws.Config) ([]OrganizationAccount, error) {
-	client := newOrganizationsClient(cfg)
+// FilterOrganizationAccountsByTag returns org accounts whose tags match the filter.
+// tagKey is required. When tagValue is empty, any account with that key matches.
+func FilterOrganizationAccountsByTag(ctx context.Context, cfg aws.Config, tagKey, tagValue string) ([]OrganizationAccount, error) {
+	return FilterOrganizationAccountsByTagWithProgress(ctx, cfg, tagKey, tagValue, nil)
+}
+
+// FilterOrganizationAccountsByTagWithProgress is like FilterOrganizationAccountsByTag but emits optional progress steps.
+func FilterOrganizationAccountsByTagWithProgress(ctx context.Context, cfg aws.Config, tagKey, tagValue string, progress TagFilterProgress) ([]OrganizationAccount, error) {
+	scan, err := ScanOrganizationAccountTagsWithProgress(ctx, cfg, progress)
+	if err != nil {
+		return nil, err
+	}
+	return FilterOrganizationAccountsFromScan(scan, tagKey, tagValue, progress), nil
+}
+
+// ScanOrganizationAccountTagsWithProgress lists all organization accounts and their Organizations tags.
+func ScanOrganizationAccountTagsWithProgress(ctx context.Context, cfg aws.Config, progress TagFilterProgress) ([]OrganizationAccountTags, error) {
+	return scanOrganizationAccountTagsWithClient(ctx, newOrganizationsClient(cfg), progress)
+}
+
+// FilterOrganizationAccountsFromScan returns accounts in scan whose tags match the filter.
+func FilterOrganizationAccountsFromScan(scan []OrganizationAccountTags, tagKey, tagValue string, progress TagFilterProgress) []OrganizationAccount {
+	tagKey = strings.TrimSpace(tagKey)
+	tagValue = strings.TrimSpace(tagValue)
+
+	out := make([]OrganizationAccount, 0)
+	for _, item := range scan {
+		if accountTagsMatchFilter(item.Tags, tagKey, tagValue) {
+			out = append(out, item.Account)
+		}
+	}
+	tagFilterStep(progress, fmt.Sprintf("Matched %d account(s) with tag key %q", len(out), tagKey))
+	return out
+}
+
+func filterOrganizationAccountsByTagWithClient(ctx context.Context, client OrganizationsAPI, tagKey, tagValue string, progress TagFilterProgress) ([]OrganizationAccount, error) {
+	tagKey = strings.TrimSpace(tagKey)
+	if tagKey == "" {
+		return nil, fmt.Errorf("tag key is required")
+	}
+
+	scan, err := scanOrganizationAccountTagsWithClient(ctx, client, progress)
+	if err != nil {
+		return nil, err
+	}
+	return FilterOrganizationAccountsFromScan(scan, tagKey, tagValue, progress), nil
+}
+
+func scanOrganizationAccountTagsWithClient(ctx context.Context, client OrganizationsAPI, progress TagFilterProgress) ([]OrganizationAccountTags, error) {
+	tagFilterStep(progress, "Listing organization accounts…")
+	accounts, err := listOrganizationAccountsWithClient(ctx, client)
+	if err != nil {
+		return nil, err
+	}
+	tagFilterStep(progress, fmt.Sprintf("Found %d organization accounts; checking tags…", len(accounts)))
+
+	out := make([]OrganizationAccountTags, 0, len(accounts))
+	for i, acct := range accounts {
+		reportTagCheckProgress(progress, i, len(accounts))
+		tags, err := listTagsWithClient(ctx, client, acct.ID)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, OrganizationAccountTags{
+			Account: acct,
+			Tags:    tags,
+		})
+	}
+	return out, nil
+}
+
+func tagFilterStep(progress TagFilterProgress, message string) {
+	if progress == nil {
+		return
+	}
+	progress.Step(message)
+}
+
+func reportTagCheckProgress(progress TagFilterProgress, index, total int) {
+	if progress == nil || total == 0 {
+		return
+	}
+	if index == 0 || index == total-1 || (index+1)%25 == 0 {
+		tagFilterStep(progress, fmt.Sprintf("Checking organization tags (%d/%d)…", index+1, total))
+	}
+}
+
+func accountTagsMatchFilter(tags []Tag, tagKey, tagValue string) bool {
+	for _, tag := range tags {
+		if tag.Key != tagKey {
+			continue
+		}
+		if tagValue == "" || tag.Value == tagValue {
+			return true
+		}
+	}
+	return false
+}
+
+func listOrganizationAccountsWithClient(ctx context.Context, client OrganizationsAPI) ([]OrganizationAccount, error) {
 	var token *string
 	out := make([]OrganizationAccount, 0)
 	for {
@@ -178,6 +275,11 @@ func ListOrganizationAccounts(ctx context.Context, cfg aws.Config) ([]Organizati
 		token = resp.NextToken
 	}
 	return out, nil
+}
+
+// ListOrganizationAccounts returns all organization accounts.
+func ListOrganizationAccounts(ctx context.Context, cfg aws.Config) ([]OrganizationAccount, error) {
+	return listOrganizationAccountsWithClient(ctx, newOrganizationsClient(cfg))
 }
 
 // ListOrganizationalUnits returns child OUs under parentID.

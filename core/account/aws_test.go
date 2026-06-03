@@ -677,6 +677,88 @@ func testOUHierarchy() fakeOUHierarchy {
 	}
 }
 
+type fakeOrganizationsFilterByTag struct {
+	accounts map[string]string
+	tags     map[string][]Tag
+}
+
+func (f fakeOrganizationsFilterByTag) DescribeAccount(
+	_ context.Context,
+	params *organizations.DescribeAccountInput,
+	_ ...func(*organizations.Options),
+) (*organizations.DescribeAccountOutput, error) {
+	id := aws.ToString(params.AccountId)
+	name, ok := f.accounts[id]
+	if !ok {
+		return nil, errors.New("AccountNotFoundException")
+	}
+	return &organizations.DescribeAccountOutput{
+		Account: &types.Account{Id: params.AccountId, Name: aws.String(name)},
+	}, nil
+}
+
+func (f fakeOrganizationsFilterByTag) ListAccounts(
+	_ context.Context,
+	_ *organizations.ListAccountsInput,
+	_ ...func(*organizations.Options),
+) (*organizations.ListAccountsOutput, error) {
+	var accounts []types.Account
+	for id, name := range f.accounts {
+		accounts = append(accounts, types.Account{
+			Id:   aws.String(id),
+			Name: aws.String(name),
+		})
+	}
+	return &organizations.ListAccountsOutput{Accounts: accounts}, nil
+}
+
+func (f fakeOrganizationsFilterByTag) ListTagsForAccount(
+	_ context.Context,
+	accountID string,
+	_ *string,
+) ([]Tag, *string, error) {
+	return f.tags[accountID], nil, nil
+}
+
+func (f fakeOrganizationsFilterByTag) SetAccountTag(
+	_ context.Context,
+	_, _, _ string,
+) error {
+	return errors.New("not implemented")
+}
+
+func (f fakeOrganizationsFilterByTag) DescribeOrganization(
+	_ context.Context,
+	_ *organizations.DescribeOrganizationInput,
+	_ ...func(*organizations.Options),
+) (*organizations.DescribeOrganizationOutput, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f fakeOrganizationsFilterByTag) ListRoots(
+	_ context.Context,
+	_ *organizations.ListRootsInput,
+	_ ...func(*organizations.Options),
+) (*organizations.ListRootsOutput, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f fakeOrganizationsFilterByTag) ListOrganizationalUnitsForParent(
+	_ context.Context,
+	_ *organizations.ListOrganizationalUnitsForParentInput,
+	_ ...func(*organizations.Options),
+) (*organizations.ListOrganizationalUnitsForParentOutput, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f fakeOrganizationsFilterByTag) ListAccountsForParent(
+	_ context.Context,
+	_ *organizations.ListAccountsForParentInput,
+	_ ...func(*organizations.Options),
+) (*organizations.ListAccountsForParentOutput, error) {
+	return nil, errors.New("not implemented")
+}
+
 func TestValidateOUID(t *testing.T) {
 	if err := validateOUID("ou-abcd-1234"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -748,4 +830,138 @@ func TestListAccountsInOUSkipsSuspended(t *testing.T) {
 	if len(accounts) != 1 || accounts[0].ID != "444444444444" {
 		t.Fatalf("accounts = %+v", accounts)
 	}
+}
+
+func TestFilterOrganizationAccountsByTagKeyOnly(t *testing.T) {
+	client := fakeOrganizationsFilterByTag{
+		accounts: map[string]string{
+			"111111111111": "Prod",
+			"222222222222": "Stage",
+			"333333333333": "Dev",
+		},
+		tags: map[string][]Tag{
+			"111111111111": {{Key: "env", Value: "prod"}},
+			"222222222222": {{Key: "env", Value: "stage"}},
+			"333333333333": {{Key: "owner", Value: "team-a"}},
+		},
+	}
+
+	matches, err := filterOrganizationAccountsByTagWithClient(context.Background(), client, "env", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 2 {
+		t.Fatalf("expected 2 matches, got %d: %+v", len(matches), matches)
+	}
+}
+
+func TestFilterOrganizationAccountsByTagExactValue(t *testing.T) {
+	client := fakeOrganizationsFilterByTag{
+		accounts: map[string]string{
+			"111111111111": "Prod",
+			"222222222222": "Stage",
+		},
+		tags: map[string][]Tag{
+			"111111111111": {{Key: "env", Value: "prod"}},
+			"222222222222": {{Key: "env", Value: "stage"}},
+		},
+	}
+
+	matches, err := filterOrganizationAccountsByTagWithClient(context.Background(), client, "env", "prod", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 1 || matches[0].ID != "111111111111" {
+		t.Fatalf("matches = %+v", matches)
+	}
+}
+
+func TestFilterOrganizationAccountsByTagDuplicateKeys(t *testing.T) {
+	client := fakeOrganizationsFilterByTag{
+		accounts: map[string]string{
+			"111111111111": "Shared",
+		},
+		tags: map[string][]Tag{
+			"111111111111": {
+				{Key: "owner", Value: "team-a"},
+				{Key: "owner", Value: "team-b"},
+			},
+		},
+	}
+
+	matches, err := filterOrganizationAccountsByTagWithClient(context.Background(), client, "owner", "team-b", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("expected 1 match, got %d", len(matches))
+	}
+}
+
+func TestFilterOrganizationAccountsByTagNoMatch(t *testing.T) {
+	client := fakeOrganizationsFilterByTag{
+		accounts: map[string]string{"111111111111": "Prod"},
+		tags:     map[string][]Tag{"111111111111": {{Key: "env", Value: "prod"}}},
+	}
+
+	matches, err := filterOrganizationAccountsByTagWithClient(context.Background(), client, "env", "stage", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("expected 0 matches, got %d", len(matches))
+	}
+}
+
+func TestFilterOrganizationAccountsFromScan(t *testing.T) {
+	scan := []OrganizationAccountTags{
+		{
+			Account: OrganizationAccount{ID: "111111111111", Name: "Prod"},
+			Tags:    []Tag{{Key: "env", Value: "prod"}},
+		},
+		{
+			Account: OrganizationAccount{ID: "222222222222", Name: "Stage"},
+			Tags:    []Tag{{Key: "env", Value: "stage"}},
+		},
+	}
+	matches := FilterOrganizationAccountsFromScan(scan, "env", "prod", nil)
+	if len(matches) != 1 || matches[0].ID != "111111111111" {
+		t.Fatalf("matches = %+v", matches)
+	}
+}
+
+func TestFilterOrganizationAccountsByTagValidation(t *testing.T) {
+	client := fakeOrganizationsFilterByTag{}
+	if _, err := filterOrganizationAccountsByTagWithClient(context.Background(), client, " ", "", nil); err == nil {
+		t.Fatal("expected tag key validation error")
+	}
+}
+
+func TestFilterOrganizationAccountsByTagProgress(t *testing.T) {
+	client := fakeOrganizationsFilterByTag{
+		accounts: map[string]string{
+			"111111111111": "Prod",
+			"222222222222": "Stage",
+		},
+		tags: map[string][]Tag{
+			"111111111111": {{Key: "env", Value: "prod"}},
+			"222222222222": {{Key: "env", Value: "stage"}},
+		},
+	}
+	rec := &recordingTagFilterProgress{}
+	_, err := filterOrganizationAccountsByTagWithClient(context.Background(), client, "env", "", rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.steps) < 3 {
+		t.Fatalf("expected at least 3 progress steps, got %d: %v", len(rec.steps), rec.steps)
+	}
+}
+
+type recordingTagFilterProgress struct {
+	steps []string
+}
+
+func (r *recordingTagFilterProgress) Step(message string) {
+	r.steps = append(r.steps, message)
 }

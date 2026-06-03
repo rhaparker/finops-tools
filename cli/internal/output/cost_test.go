@@ -116,7 +116,7 @@ func TestWriteCostResultPrettyPrintLinkedAccount(t *testing.T) {
 	r := fixtureResult()
 	r.Linked = true
 	r.AccountName = "Quay Production"
-	r.AccountID = "206170669542"
+	r.AccountID = "111111111111"
 	var buf bytes.Buffer
 	if err := WriteCostResult(&buf, FormatPrettyPrint, r); err != nil {
 		t.Fatal(err)
@@ -125,7 +125,7 @@ func TestWriteCostResultPrettyPrintLinkedAccount(t *testing.T) {
 	if strings.Contains(out, "Payer:") {
 		t.Errorf("linked account should not use Payer label:\n%s", out)
 	}
-	if !strings.Contains(out, "Account:") || !strings.Contains(out, "Quay Production (206170669542)") {
+	if !strings.Contains(out, "Account:") || !strings.Contains(out, "Quay Production (111111111111)") {
 		t.Errorf("missing linked account label:\n%s", out)
 	}
 }

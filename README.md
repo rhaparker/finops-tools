@@ -209,19 +209,26 @@ finops cost get --account 123456789012 --format json
 finops cost get --account 123456789012 --format csv
 finops cost get --account 123456789012 --split-by service
 finops cost get --account 123456789012 --split-by account
-finops cost get --account 710019948333 --payer rhc   # member account, payer registered; member need not be in config
+finops cost get --account 333333333333 --payer rhc   # member account, payer registered; member need not be in config
 finops account list-ous --payer rh-control           # discover OU IDs
 finops cost get --ou ou-abcd-1234 --payer rh-control
 finops cost get --ou ou-abcd-1234 --payer rh-control --ou-direct --days 7
+finops cost get --payer rh-control --tag-key organization
+finops cost get --payer rh-control --tag-key organization --tag-value "Hybrid Platform" --split-by service
+finops report generate costs --payer rh-control --tag-key env --tag-value prod -o prod.html
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--account` | One or more comma-separated **12-digit AWS account IDs** (must be registered with `account add` unless used with `--payer`); at least one of `--account`, `--account-alias`, or `--ou` is required |
+| `--account` | One or more comma-separated **12-digit AWS account IDs**; at least one of `--account`, `--account-alias`, or `--ou` is required (mutually exclusive with `--tag-key`) |
 | `--account-alias` | One or more comma-separated configured aliases (e.g. `rh-control`, or a linked alias such as `quay`) |
 | `--ou` | One or more comma-separated AWS OU IDs (`ou-xxxx-yyyyy`); requires `--payer`; includes descendant OUs by default |
 | `--ou-direct` | With `--ou`, include only accounts directly in the OU (not child OUs) |
-| `--payer` | Registered payer alias when using `--account` for a member account not in config, or when using `--ou` (requires `--account` or `--ou`) |
+| `--payer` | Registered payer alias (required with `--tag-key` or `--ou`; optional with `--account` for unregistered member IDs) |
+| `--tag-key` | Select all org accounts with this AWS Organizations tag key (requires `--payer`; optional `--tag-value` for exact match) |
+| `--tag-value` | Optional tag value when using `--tag-key` (omit to match any value for the key) |
+| `--skip-org-cache` | Bypass cached organization account/tag data (always fetch live from AWS) |
+| `--refresh-org-cache` | Ignore cached organization data and refresh the cache from AWS (mutually exclusive with `--skip-org-cache`) |
 | `--days` | Last N calendar days (mutually exclusive with `--months` and `--from`/`--to`) |
 | `--months` | Last N calendar months from the 1st of the month (mutually exclusive with `--days` and `--from`/`--to`) |
 | `--from` | Start date `YYYY-MM-DD` inclusive (optional `--to`; otherwise through the latest stable day) |
@@ -230,6 +237,7 @@ finops cost get --ou ou-abcd-1234 --payer rh-control --ou-direct --days 7
 | `--auth-method` | `saml` (default) or `profile`; when omitted, uses `defaults.aws.auth_method` from config |
 | `--config` | Path to finops config file (default: OS-specific config dir) |
 | `--format` | `pretty-print` (default), `json`, or `csv` |
+| `--quiet` | Suppress progress messages on stderr (cost/CSV/JSON still go to stdout) |
 | `--split-by` | Group costs by dimension: `service` (AWS service) or `account` (linked AWS account ID); includes share % and relative cost bars in `pretty-print` |
 | `--provider` | `aws` (default). `gcp` is reserved for a future release |
 
@@ -243,7 +251,7 @@ Generate HTML reports from configured accounts. Templates use **Jinja2 syntax** 
 finops report list
 finops report generate costs --account-alias rh-control
 finops report generate costs --account-alias rh-control -o costs.html
-finops report generate costs --account 710019948333 --payer rhc -o member.html
+finops report generate costs --account 333333333333 --payer rhc -o member.html
 finops report generate costs --ou ou-abcd-1234 --payer rh-control -o ou-costs.html
 ```
 
@@ -258,11 +266,15 @@ The **costs** template includes:
 |------|-------------|
 | `template` | Positional argument: report template name (run `finops report list` for options) |
 | `--format` | Output format (default: `html`) |
-| `--account` | Comma-separated payer AWS account IDs (at least one of `--account`, `--account-alias`, or `--ou` is required) |
+| `--account` | Comma-separated payer AWS account IDs (at least one of `--account`, `--account-alias`, or `--ou` is required; mutually exclusive with `--tag-key`) |
 | `--account-alias` | Comma-separated configured aliases |
 | `--ou` | Comma-separated AWS OU IDs (`ou-xxxx-yyyyy`); requires `--payer`; includes descendant OUs by default |
 | `--ou-direct` | With `--ou`, include only accounts directly in the OU (not child OUs) |
-| `--payer` | Registered payer alias when using `--account` for a member account not in config, or when using `--ou` (requires `--account` or `--ou`) |
+| `--payer` | Registered payer alias (required with `--tag-key` or `--ou`; optional with `--account` for unregistered member IDs) |
+| `--tag-key` | Select accounts by AWS Organizations tag key (requires `--payer`) |
+| `--tag-value` | Optional tag value with `--tag-key` (omit to match any value) |
+| `--skip-org-cache` | Bypass cached organization account/tag data |
+| `--refresh-org-cache` | Refresh organization cache from AWS |
 | `--auth-method` | `saml` (default) or `profile` |
 | `--config` | Path to finops config file |
 | `--credentials-file` | Path to AWS credentials file |
@@ -270,7 +282,13 @@ The **costs** template includes:
 | `--quiet` | Suppress progress messages on stderr (HTML still goes to stdout or `--output`) |
 | `--days`, `--months`, `--from`, `--to`, `--exclude-recent-days` | Same period options as `finops cost get` |
 
-Progress lines (credential checks, each Cost Explorer query, render) are printed to **stderr** so you can redirect HTML safely, e.g. `finops report generate ... -o report.html`.
+Progress lines (tag resolution, credential checks, Cost Explorer queries) are printed to **stderr** so you can redirect output safely, e.g. `finops cost get ... --format json > costs.json`.
+
+Use `--quiet` to suppress progress messages.
+
+Tag-based account selection caches organization account and tag listings via the shared finops cache service (`cli/internal/cache`) under `cache/org/<payer-account-id>.json` next to your config (default TTL: 1 hour). Use `--refresh-org-cache` to force a refresh or `--skip-org-cache` to always query AWS live.
+
+When many linked accounts under the same payer are queried together (typical for `--tag-key`), finops uses **one bulk Cost Explorer query** grouped by linked account instead of one API call per account. `--split-by service` uses batched queries (~100 accounts per call).
 
 ## Cross-compile (local)
 

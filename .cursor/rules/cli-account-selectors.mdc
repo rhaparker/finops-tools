@@ -32,7 +32,7 @@ Flags().StringVar(&id, "account", "", "12-digit AWS account ID")
 ```bash
 finops account list-tags --account-alias rh-control
 finops account list-tags --account-id 111111111111 --payer rh-control
-finops account update-tag --account-id 957976798851 --tag-key organization --tag-value "Hybrid Platform" --payer rh-control
+finops account update-tag --account-id 111111111111 --tag-key organization --tag-value "Hybrid Platform" --payer rh-control
 ```
 
 ## AWS Organizations account tags

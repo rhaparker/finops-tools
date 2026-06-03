@@ -1,0 +1,36 @@
+---
+description: Use only fake AWS account IDs in repo content (docs, tests, examples, rules)
+alwaysApply: true
+---
+
+# AWS account IDs in the repository
+
+Never commit **real** 12-digit AWS account IDs in source, tests, README, Cursor rules, or command help/examples.
+
+## Allowed placeholder IDs
+
+Use only obviously fake IDs (repeated digits or AWS-doc-style sequences):
+
+| Role | Example IDs |
+|------|-------------|
+| Payer / management | `123456789012` |
+| Second payer | `987654321098` |
+| Linked / member | `111111111111`, `222222222222` |
+| Unregistered member (cost/report `--account` + `--payer`) | `333333333333` |
+| Unknown / error paths | `999999999999` |
+
+Do not invent new “random-looking” 12-digit numbers (e.g. `710019948333`) — they may be real accounts.
+
+## Where this applies
+
+- `README.md`, `.cursor/rules/*.mdc`, Cobra `Long`/`Example` strings
+- Go tests and fixtures (`*_test.go`, YAML samples in tests)
+- Comments and error-message examples that include account IDs
+
+## Aliases and org names
+
+Internal payer aliases (`rh-control`, `rhc`, `osd-staging-1`) and product names in examples are acceptable; still avoid pairing them with real account IDs.
+
+## IAM ARNs in examples
+
+Use the same placeholder in ARNs: `arn:aws:iam::111111111111:role/...` with payer `123456789012` when both appear.
