@@ -129,6 +129,41 @@ func runReportGenerate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	dateRange, err := resolveCostPeriod(time.Now().UTC())
+	if err != nil {
+		return err
+	}
+
+	if len(targets) == 0 {
+		var out *os.File
+		if path := strings.TrimSpace(reportGenerateOutput); path != "" {
+			f, err := os.Create(path)
+			if err != nil {
+				return fmt.Errorf("create output file: %w", err)
+			}
+			defer f.Close()
+			out = f
+		} else {
+			out = os.Stdout
+		}
+		report := corereport.EmptyCostsReport(cost.CostQuery{
+			Provider: cost.ProviderAWS,
+			Range:    dateRange,
+		}, time.Now().UTC())
+		status.Step("Rendering HTML report…")
+		if err := reportpkg.RenderCostsHTML(out, report); err != nil {
+			return err
+		}
+		if !reportGenerateQuiet {
+			if path := strings.TrimSpace(reportGenerateOutput); path != "" {
+				status.Step(fmt.Sprintf("Wrote report to %s", path))
+			} else {
+				status.Step("Report written to stdout")
+			}
+		}
+		return nil
+	}
+
 	status.Step("Ensuring AWS credentials…")
 	if err := ensureCostCredentials(cmd.Context(), cmd, cfg, targets, awsFlags.ConfigPath, awsFlags.CredentialsFile, awsFlags.AuthMethod); err != nil {
 		return err
@@ -137,11 +172,6 @@ func runReportGenerate(cmd *cobra.Command, args []string) error {
 		status.Step("Preparing account configuration…")
 	}
 	targets, err = prepareCostTargets(cmd.Context(), cfg, targets, awsFlags.CredentialsFile, status)
-	if err != nil {
-		return err
-	}
-
-	dateRange, err := resolveCostPeriod(time.Now().UTC())
 	if err != nil {
 		return err
 	}

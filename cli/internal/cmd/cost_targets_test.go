@@ -156,16 +156,16 @@ func TestResolveCostTargetsByTagNoMatches(t *testing.T) {
 	}
 
 	cmd := &cobra.Command{}
-	_, err = resolveCostTargets(context.Background(), cmd, cfg, costTargetSelector{
+	targets, err := resolveCostTargets(context.Background(), cmd, cfg, costTargetSelector{
 		PayerAlias: "rh-control",
 		TagKey:     "env",
 		TagValue:   "prod",
 	}, path, "", "", nil)
-	if err == nil {
-		t.Fatal("expected error for no matches")
+	if err != nil {
+		t.Fatalf("resolveCostTargets: %v", err)
 	}
-	if !strings.Contains(err.Error(), "no accounts matched") {
-		t.Fatalf("error = %q", err.Error())
+	if len(targets) != 0 {
+		t.Fatalf("got %d targets, want 0", len(targets))
 	}
 }
 

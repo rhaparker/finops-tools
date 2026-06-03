@@ -294,9 +294,11 @@ func resolveCostTargetsByTag(
 	}
 	if len(matches) == 0 {
 		if tagValue != "" {
-			return nil, fmt.Errorf("no accounts matched tag key %q value %q", tagKey, tagValue)
+			costStep(status, fmt.Sprintf("No accounts matched tag %s=%q", tagKey, tagValue))
+		} else {
+			costStep(status, fmt.Sprintf("No accounts matched tag key %q", tagKey))
 		}
-		return nil, fmt.Errorf("no accounts matched tag key %q", tagKey)
+		return nil, nil
 	}
 
 	targets := make([]cost.AccountTarget, 0, len(matches))

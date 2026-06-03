@@ -23,6 +23,18 @@ type CostsReport struct {
 	Accounts    []cost.AccountTarget
 }
 
+// EmptyCostsReport returns a zero-filled report for the query period with no accounts.
+func EmptyCostsReport(q cost.CostQuery, now time.Time) CostsReport {
+	dr := cost.EffectiveRange(q, now)
+	endInclusive := dr.End.AddDate(0, 0, -1)
+	return CostsReport{
+		GeneratedAt: now,
+		StartDate:   dr.Start.Format("2006-01-02"),
+		EndDate:     endInclusive.Format("2006-01-02"),
+		Metric:      cost.MetricNetAmortized,
+	}
+}
+
 // BuildCostsReport fetches total, per-account, per-service, and daily net amortized costs.
 // progress may be nil to disable status updates.
 func BuildCostsReport(ctx context.Context, q cost.CostQuery, progress Progress) (CostsReport, error) {

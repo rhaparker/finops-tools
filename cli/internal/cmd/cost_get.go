@@ -154,6 +154,13 @@ func runCostGet(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	if len(targets) == 0 {
+		dateRange, err := resolveCostPeriod(time.Now().UTC())
+		if err != nil {
+			return err
+		}
+		return output.WriteCostResult(cmd.OutOrStdout(), format, cost.EmptyResult(provider, dateRange, splitBy))
+	}
 
 	if provider == cost.ProviderAWS {
 		status.Step("Ensuring AWS credentials…")

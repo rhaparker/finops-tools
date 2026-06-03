@@ -177,6 +177,18 @@ type CostResult struct {
 	Linked bool `json:"linked,omitempty"`
 }
 
+// EmptyResult is a zero-amount summary for a period when no accounts were selected.
+func EmptyResult(provider Provider, dr DateRange, splitBy SplitBy) CostResult {
+	endInclusive := dr.End.AddDate(0, 0, -1)
+	return CostResult{
+		Provider:  provider,
+		Metric:    MetricNetAmortized,
+		SplitBy:   splitBy,
+		StartDate: formatDate(dr.Start),
+		EndDate:   formatDate(endInclusive),
+	}
+}
+
 // Fetch retrieves cost data for one or more accounts and returns a combined summary.
 func Fetch(ctx context.Context, q CostQuery) (CostResult, error) {
 	if len(q.Accounts) == 0 {
