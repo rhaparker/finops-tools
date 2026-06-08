@@ -193,7 +193,11 @@ func waitForCallback(ctx context.Context, listener net.Listener, oauth2cfg *oaut
 		done <- tokenResult{token: tokenSetFromOAuth(tok)}
 	})
 
-	go func() { _ = srv.Serve(listener) }()
+	go func() {
+		if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			done <- tokenResult{err: fmt.Errorf("oauth callback server: %w", err)}
+		}
+	}()
 
 	select {
 	case <-ctx.Done():
