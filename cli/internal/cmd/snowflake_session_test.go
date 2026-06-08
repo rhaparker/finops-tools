@@ -38,7 +38,7 @@ func TestEnsureSnowflakeAccessToken_UsesValidCachedToken(t *testing.T) {
 		return nil
 	}
 
-	got, err := ensureSnowflakeAccessToken(context.Background(), configstore.Default(), "rhprod", "", "", configstore.SnowflakeAccount{Account: "acct"})
+	got, _, err := ensureSnowflakeAccessToken(context.Background(), configstore.Default(), "rhprod", "", "", configstore.SnowflakeAccount{Account: "acct"})
 	if err != nil {
 		t.Fatalf("ensureSnowflakeAccessToken error: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestEnsureSnowflakeAccessToken_RefreshesExpiredToken(t *testing.T) {
 		return nil
 	}
 
-	got, err := ensureSnowflakeAccessToken(context.Background(), configstore.Default(), "rhprod", "", "", configstore.SnowflakeAccount{Account: "acct"})
+	got, _, err := ensureSnowflakeAccessToken(context.Background(), configstore.Default(), "rhprod", "", "", configstore.SnowflakeAccount{Account: "acct"})
 	if err != nil {
 		t.Fatalf("ensureSnowflakeAccessToken error: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestEnsureSnowflakeAccessToken_FallsBackToLoginWhenRefreshFails(t *testing.
 		return nil
 	}
 
-	got, err := ensureSnowflakeAccessToken(context.Background(), configstore.Default(), "rhprod", "", "", configstore.SnowflakeAccount{Account: "acct"})
+	got, _, err := ensureSnowflakeAccessToken(context.Background(), configstore.Default(), "rhprod", "", "", configstore.SnowflakeAccount{Account: "acct"})
 	if err != nil {
 		t.Fatalf("ensureSnowflakeAccessToken error: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestEnsureSnowflakeAccessToken_LogsInWhenNoCachedToken(t *testing.T) {
 		return nil
 	}
 
-	got, err := ensureSnowflakeAccessToken(context.Background(), configstore.Default(), "rhprod", "", "", configstore.SnowflakeAccount{Account: "acct"})
+	got, _, err := ensureSnowflakeAccessToken(context.Background(), configstore.Default(), "rhprod", "", "", configstore.SnowflakeAccount{Account: "acct"})
 	if err != nil {
 		t.Fatalf("ensureSnowflakeAccessToken error: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestEnsureSnowflakeAccessToken_ReturnsClearLoginFailure(t *testing.T) {
 		return nil
 	}
 
-	_, err := ensureSnowflakeAccessToken(context.Background(), configstore.Default(), "rhprod", "", "", configstore.SnowflakeAccount{Account: "acct"})
+	_, _, err := ensureSnowflakeAccessToken(context.Background(), configstore.Default(), "rhprod", "", "", configstore.SnowflakeAccount{Account: "acct"})
 	if err == nil {
 		t.Fatal("expected login failure")
 	}

@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"strings"
-
 	"github.com/openshift-online/finops-tools/cli/internal/configstore"
 	"github.com/openshift-online/finops-tools/cli/internal/output"
 	"github.com/openshift-online/finops-tools/cli/internal/snowflakeoauth"
@@ -59,23 +57,11 @@ func runSnowflakeQuery(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	tok, err := ensureSnowflakeAccessToken(cmd.Context(), cfg, alias, snowflakeFlags.SecretsPath, snowflakeFlags.TokensPath, acct)
+	tok, oauthCfg, err := ensureSnowflakeAccessToken(cmd.Context(), cfg, alias, snowflakeFlags.SecretsPath, snowflakeFlags.TokensPath, acct)
 	if err != nil {
 		return err
 	}
 
-	clientID, clientSecret, err := resolveSnowflakeOAuthClient(snowflakeFlags.SecretsPath)
-	if err != nil {
-		return err
-	}
-	sso := acct.SSO
-	if strings.TrimSpace(sso) == "" {
-		sso = cfg.SnowflakeSSOIssuer()
-	}
-	oauthCfg, err := snowflakeOAuthConfig(cfg, clientID, clientSecret, sso)
-	if err != nil {
-		return err
-	}
 	claims, err := snowflakeoauth.ValidateDataverseToken(tok.AccessToken, oauthCfg.Audience)
 	if err != nil {
 		return err

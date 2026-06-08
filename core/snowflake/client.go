@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	_ "github.com/snowflakedb/gosnowflake"
 	"github.com/snowflakedb/gosnowflake"
 )
 

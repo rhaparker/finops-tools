@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	// AudienceClaim is the JWT audience required by Dataverse Snowflake (configurable via finops defaults).
+	// DefaultAudience is the JWT audience required by Dataverse Snowflake (configurable via finops defaults).
 	DefaultAudience = "dataverse-snowflake"
 	// ScopeSessionRoleAny allows Snowflake to assume any role granted to the user.
 	ScopeSessionRoleAny = "session:role-any"

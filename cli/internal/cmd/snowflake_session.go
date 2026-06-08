@@ -63,10 +63,10 @@ func loadSnowflakeToken(alias, tokensPath string) (snowflakeoauth.TokenSet, erro
 	return tok, nil
 }
 
-func ensureSnowflakeAccessToken(ctx context.Context, cfg configstore.File, alias, secretsPath, tokensPath string, acct configstore.SnowflakeAccount) (snowflakeoauth.TokenSet, error) {
+func ensureSnowflakeAccessToken(ctx context.Context, cfg configstore.File, alias, secretsPath, tokensPath string, acct configstore.SnowflakeAccount) (snowflakeoauth.TokenSet, snowflakeoauth.ClientConfig, error) {
 	clientID, clientSecret, err := resolveSnowflakeOAuthClientFn(secretsPath)
 	if err != nil {
-		return snowflakeoauth.TokenSet{}, err
+		return snowflakeoauth.TokenSet{}, snowflakeoauth.ClientConfig{}, err
 	}
 	sso := acct.SSO
 	if strings.TrimSpace(sso) == "" {
@@ -74,33 +74,33 @@ func ensureSnowflakeAccessToken(ctx context.Context, cfg configstore.File, alias
 	}
 	oauthCfg, err := snowflakeOAuthConfig(cfg, clientID, clientSecret, sso)
 	if err != nil {
-		return snowflakeoauth.TokenSet{}, err
+		return snowflakeoauth.TokenSet{}, snowflakeoauth.ClientConfig{}, err
 	}
 
 	tok, err := loadSnowflakeTokenFn(alias, tokensPath)
 	if err != nil && !errors.Is(err, errSnowflakeTokensNotFound) {
-		return snowflakeoauth.TokenSet{}, err
+		return snowflakeoauth.TokenSet{}, snowflakeoauth.ClientConfig{}, err
 	}
 	if err == nil && tok.Valid() {
-		return tok, nil
+		return tok, oauthCfg, nil
 	}
 	if err == nil && strings.TrimSpace(tok.RefreshToken) != "" {
 		refreshed, err := refreshSnowflakeTokenFn(ctx, oauthCfg, tok.RefreshToken)
 		if err == nil && refreshed.Valid() {
 			if err := persistSnowflakeTokenFn(alias, tokensPath, refreshed); err != nil {
-				return snowflakeoauth.TokenSet{}, err
+				return snowflakeoauth.TokenSet{}, snowflakeoauth.ClientConfig{}, err
 			}
-			return refreshed, nil
+			return refreshed, oauthCfg, nil
 		}
 	}
 	reauthenticated, err := loginSnowflakeTokenFn(ctx, oauthCfg)
 	if err != nil {
-		return snowflakeoauth.TokenSet{}, fmt.Errorf("snowflake oauth login failed for alias %q: %w", alias, err)
+		return snowflakeoauth.TokenSet{}, snowflakeoauth.ClientConfig{}, fmt.Errorf("snowflake oauth login failed for alias %q: %w", alias, err)
 	}
 	if err := persistSnowflakeTokenFn(alias, tokensPath, reauthenticated); err != nil {
-		return snowflakeoauth.TokenSet{}, err
+		return snowflakeoauth.TokenSet{}, snowflakeoauth.ClientConfig{}, err
 	}
-	return reauthenticated, nil
+	return reauthenticated, oauthCfg, nil
 }
 
 func persistSnowflakeToken(alias, tokensPath string, tok snowflakeoauth.TokenSet) error {
