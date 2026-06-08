@@ -298,7 +298,7 @@ finops report generate costs --payer rh-control --tag-key env --tag-value prod -
 
 ### Reports
 
-Generate HTML reports from configured accounts. Templates use **Jinja2 syntax** (rendered with [gonja](https://github.com/nikolalohinski/gonja) in the CLI binary).
+Generate HTML reports from configured accounts. Templates use Go's **`html/template`**, embedded in the CLI binary under `cli/internal/report/templates/`.
 
 ```bash
 finops report list

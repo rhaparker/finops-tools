@@ -2,49 +2,35 @@ package report
 
 import (
 	"fmt"
+	"html/template"
 	"io"
 	"strings"
 	"sync"
 
-	"github.com/nikolalohinski/gonja/v2"
-	"github.com/nikolalohinski/gonja/v2/config"
-	"github.com/nikolalohinski/gonja/v2/exec"
-	"github.com/nikolalohinski/gonja/v2/loaders"
 	"github.com/openshift-online/finops-tools/cli/internal/format"
 	corereport "github.com/openshift-online/finops-tools/core/report"
 	"github.com/openshift-online/finops-tools/core/cost"
 )
 
-const costsTemplate = "costs.html.j2"
+const costsTemplate = "costs"
 
 var (
 	initOnce sync.Once
-	tpl      *exec.Template
+	tpl      *template.Template
 	initErr  error
 )
 
-func costsTemplateCompiled() (*exec.Template, error) {
+func costsTemplateCompiled() (*template.Template, error) {
 	initOnce.Do(func() {
-		embedLoader, err := loaders.NewEmbedFSLoader("templates", &templateFS)
-		if err != nil {
-			initErr = err
-			return
-		}
-		loader := newStableLoader(embedLoader)
-		cfg := config.New()
-		environment := &exec.Environment{
-			Context:           exec.EmptyContext(),
-			Filters:           gonja.DefaultEnvironment.Filters,
-			Tests:             gonja.DefaultEnvironment.Tests,
-			ControlStructures: gonja.DefaultEnvironment.ControlStructures,
-			Methods:           gonja.DefaultEnvironment.Methods,
-		}
-		tpl, initErr = exec.NewTemplate(costsTemplate, cfg, loader, environment)
+		tpl, initErr = template.ParseFS(templateFS,
+			"templates/layout.html",
+			"templates/costs.html",
+		)
 	})
 	return tpl, initErr
 }
 
-// CostsReportView is the template context for costs.html.j2.
+// CostsReportView is the template context for the costs HTML report.
 type CostsReportView struct {
 	GeneratedAt     string
 	AccountSummary  string
@@ -57,20 +43,21 @@ type CostsReportView struct {
 	ByAccount       []BreakdownRowView
 	ByService       []BreakdownRowView
 	Daily           []cost.DailyCostItem
+	DailyChartSVG   template.HTML
 }
 
 // BreakdownRowView is one breakdown table row for templates.
 type BreakdownRowView struct {
-	Label             string
-	Amount            float64
-	AmountFormatted   string
-	Percent           float64
-	PercentFormatted  string
+	Label            string
+	Amount           float64
+	AmountFormatted  string
+	Percent          float64
+	PercentFormatted string
 }
 
 // NewCostsReportView maps a core CostsReport for HTML rendering.
 func NewCostsReportView(r corereport.CostsReport) CostsReportView {
-	return CostsReportView{
+	view := CostsReportView{
 		GeneratedAt:    r.GeneratedAt.UTC().Format("2006-01-02 15:04:05 UTC"),
 		AccountSummary: formatAccountSummary(r.Accounts),
 		StartDate:      r.StartDate,
@@ -83,6 +70,8 @@ func NewCostsReportView(r corereport.CostsReport) CostsReportView {
 		ByService:      breakdownRows(r.ByService, cost.SplitByService, r.Total, r.Currency),
 		Daily:          r.Daily,
 	}
+	view.DailyChartSVG = template.HTML(dailyChartSVG(view.Daily, view.Currency))
+	return view
 }
 
 func breakdownRows(items []cost.CostBreakdownItem, split cost.SplitBy, total float64, currency string) []BreakdownRowView {
@@ -122,20 +111,7 @@ func RenderCostsHTML(w io.Writer, r corereport.CostsReport) error {
 		return fmt.Errorf("compile costs template: %w", err)
 	}
 	view := NewCostsReportView(r)
-	ctx := exec.NewContext(map[string]any{
-		"generated_at":     view.GeneratedAt,
-		"account_summary":  view.AccountSummary,
-		"start_date":       view.StartDate,
-		"end_date":         view.EndDate,
-		"currency":         view.Currency,
-		"metric":           view.Metric,
-		"total":            view.Total,
-		"total_formatted":  view.TotalFormatted,
-		"by_account":       view.ByAccount,
-		"by_service":       view.ByService,
-		"daily_chart_svg":  dailyChartSVG(view.Daily, view.Currency),
-	})
-	if err := t.Execute(w, ctx); err != nil {
+	if err := t.ExecuteTemplate(w, costsTemplate, view); err != nil {
 		return fmt.Errorf("render costs template: %w", err)
 	}
 	return nil
