@@ -50,6 +50,7 @@ func AddSnowflake(ctx context.Context, opts AddSnowflakeOptions) (AddResult, err
 		login = defaultSnowflakeLogin
 	}
 
+	refreshed := false
 	tok := opts.ExistingToken
 	if opts.ForceLogin || !tok.Valid() {
 		var err error
@@ -57,6 +58,7 @@ func AddSnowflake(ctx context.Context, opts AddSnowflakeOptions) (AddResult, err
 		if err != nil {
 			return AddResult{}, err
 		}
+		refreshed = true
 	}
 
 	tokensPath := opts.TokensPath
@@ -110,7 +112,7 @@ func AddSnowflake(ctx context.Context, opts AddSnowflakeOptions) (AddResult, err
 		Provider:  ProviderSnowflake,
 		AccountID: acct.Account,
 		Profile:   alias,
-		Refreshed: true,
+		Refreshed: refreshed,
 	}, nil
 }
 

@@ -2,6 +2,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -24,6 +25,7 @@ var (
 	accountAddSnowflakeSchema  string
 	accountAddSnowflakeSSO     string
 	accountAddSnowflakeSecrets string
+	accountAddSnowflakeTokens  string
 	addAccountFn               = account.Add
 	addSnowflakeAccountFn      = account.AddSnowflake
 	loadAWSAccountProfileFn    = awsconfig.LoadSharedConfigProfile
@@ -104,6 +106,7 @@ func init() {
 	accountAddCmd.Flags().StringVar(&accountAddSnowflakeSchema, "schema", "", "Default Snowflake schema")
 	accountAddCmd.Flags().StringVar(&accountAddSnowflakeSSO, "sso", "", "Red Hat SSO environment: prod or stage (default: config snowflake.sso_issuer or prod)")
 	accountAddCmd.Flags().StringVar(&accountAddSnowflakeSecrets, "oauth-secrets-file", "", "Path to Snowflake OAuth client secrets file")
+	accountAddCmd.Flags().StringVar(&accountAddSnowflakeTokens, "tokens-file", "", "Path to Snowflake OAuth tokens file")
 }
 
 func runAccountAdd(cmd *cobra.Command, args []string) error {
@@ -257,6 +260,11 @@ func runAccountAddSnowflake(cmd *cobra.Command, accountID string) error {
 		return err
 	}
 
+	existingTok, err := loadSnowflakeToken(alias, accountAddSnowflakeTokens)
+	if err != nil && !errors.Is(err, errSnowflakeTokensNotFound) {
+		return err
+	}
+
 	res, err := addSnowflakeAccountFn(cmd.Context(), account.AddSnowflakeOptions{
 		Account: account.SnowflakeAccountSettings{
 			Account:   session.Account,
@@ -265,9 +273,11 @@ func runAccountAddSnowflake(cmd *cobra.Command, accountID string) error {
 			Database:  session.Database,
 			Schema:    session.Schema,
 		},
-		Alias:      alias,
-		OAuth:      oauthCfg,
-		ForceLogin: accountAddForce,
+		Alias:         alias,
+		OAuth:         oauthCfg,
+		TokensPath:    accountAddSnowflakeTokens,
+		ExistingToken: existingTok,
+		ForceLogin:    accountAddForce,
 	})
 	if err != nil {
 		return err
