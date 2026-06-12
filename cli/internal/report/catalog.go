@@ -10,6 +10,8 @@ const (
 	TemplateCosts = "costs"
 	// TemplateSavingsPlans is the Savings Plans coverage and utilization report template.
 	TemplateSavingsPlans = "savings-plans"
+	// TemplateCostAnomalies is the AWS Cost Anomaly Detection report template.
+	TemplateCostAnomalies = "cost-anomalies"
 	// FormatHTML is the HTML output format.
 	FormatHTML = "html"
 )
@@ -32,6 +34,11 @@ func Templates() []TemplateInfo {
 		{
 			Name:        TemplateSavingsPlans,
 			Description: "Savings Plans coverage and utilization by month",
+			Formats:     []string{FormatHTML},
+		},
+		{
+			Name:        TemplateCostAnomalies,
+			Description: "AWS Cost Anomaly Detection: detected anomalies with root cause breakdown",
 			Formats:     []string{FormatHTML},
 		},
 	}

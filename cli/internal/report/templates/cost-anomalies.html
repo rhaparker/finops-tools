@@ -1,0 +1,125 @@
+{{ define "title" }}Cost Anomalies — {{ .AccountSummary }}{{ end }}
+
+{{ define "content" }}
+<style>
+  .score-bar {
+    display: inline-block;
+    height: 10px;
+    background: var(--accent);
+    border-radius: 3px;
+    vertical-align: middle;
+    margin-right: 0.4rem;
+    min-width: 2px;
+  }
+  .impact-positive { color: #ef4444; font-weight: 600; }
+  .badge {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+  .badge-critical { background: #fef2f2; color: #ef4444; }
+  .badge-high     { background: #fff7ed; color: #f59e0b; }
+  .badge-medium   { background: #fffbeb; color: #d97706; }
+  .badge-low      { background: #f0fdf4; color: #22c55e; }
+  details { margin-top: 0.5rem; }
+  details summary { cursor: pointer; color: var(--accent); font-size: 0.9rem; }
+  .root-causes-table { font-size: 0.85rem; margin-top: 0.5rem; }
+  .root-causes-table th, .root-causes-table td { padding: 0.3rem 0.6rem; }
+  .empty-state { color: var(--muted); padding: 1rem 0; }
+</style>
+
+<header>
+  <h1>Cost Anomalies</h1>
+  <p class="meta">
+    <strong>Account:</strong> {{ .AccountSummary }}<br>
+    <strong>Period:</strong> {{ .StartDate }} — {{ .EndDate }}<br>
+    <strong>Generated:</strong> {{ .GeneratedAt }}
+  </p>
+</header>
+
+<section>
+  <h2>Summary</h2>
+  <p class="meta">
+    Anomalies detected by AWS Cost Anomaly Detection. Sorted by dollar impact.
+  </p>
+  {{ if .Anomalies }}
+  <p>
+    <strong>{{ .AnomalyCount }}</strong> anomal{{ .AnomalyCountLabel }} detected
+    totalling <strong class="impact-positive">{{ .TotalImpactFormatted }}</strong> in unexpected spend.
+  </p>
+  {{ else }}
+  <p class="empty-state">No anomalies detected for this period.</p>
+  {{ end }}
+</section>
+
+{{ if .Anomalies }}
+<section>
+  <h2>Anomaly Detail</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Service / Dimension</th>
+        <th>Period</th>
+        <th class="amount">Impact</th>
+        <th class="percent">Impact %</th>
+        <th class="amount">Actual Spend</th>
+        <th class="amount">Expected Spend</th>
+        <th>Score</th>
+        <th>Severity</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{ range .Anomalies }}
+      <tr>
+        <td>
+          <strong>{{ .Service }}</strong>
+          {{ if .RootCauses }}
+          <details>
+            <summary>{{ .RootCauseSummary }}</summary>
+            <table class="root-causes-table">
+              <thead>
+                <tr>
+                  <th>Account</th>
+                  <th>Region</th>
+                  <th>Service</th>
+                  <th>Usage Type</th>
+                  <th class="amount">Contribution</th>
+                </tr>
+              </thead>
+              <tbody>
+                {{ range .RootCauses }}
+                <tr>
+                  <td>{{ .DisplayAccount }}</td>
+                  <td>{{ .Region }}</td>
+                  <td>{{ .Service }}</td>
+                  <td>{{ .UsageType }}</td>
+                  <td class="amount">{{ .ContributionFormatted }}</td>
+                </tr>
+                {{ end }}
+              </tbody>
+            </table>
+          </details>
+          {{ end }}
+        </td>
+        <td>{{ .PeriodDisplay }}</td>
+        <td class="amount impact-positive">{{ .TotalImpactFormatted }}</td>
+        <td class="percent impact-positive">{{ .ImpactPctFormatted }}</td>
+        <td class="amount">{{ .ActualSpendFormatted }}</td>
+        <td class="amount">{{ .ExpectedSpendFormatted }}</td>
+        <td>
+          <span class="score-bar" style="width:{{ .ScoreBarWidth }}px"></span>{{ .CurrentScoreFormatted }}
+        </td>
+        <td><span class="badge {{ .SeverityClass }}">{{ .Severity }}</span></td>
+      </tr>
+      {{ end }}
+    </tbody>
+  </table>
+</section>
+{{ end }}
+{{ end }}
+
+{{ define "cost-anomalies" }}
+{{ template "layout" . }}
+{{ end }}

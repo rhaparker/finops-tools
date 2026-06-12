@@ -7,10 +7,21 @@ import (
 )
 
 func TestGeneratorForKnownTemplates(t *testing.T) {
-	for _, name := range []string{TemplateCosts, TemplateSavingsPlans} {
+	for _, name := range []string{TemplateCosts, TemplateSavingsPlans, TemplateCostAnomalies} {
 		if _, err := GeneratorFor(name); err != nil {
 			t.Fatalf("GeneratorFor(%q): %v", name, err)
 		}
+	}
+}
+
+func TestCostAnomaliesGeneratorRequiresTargets(t *testing.T) {
+	gen, err := GeneratorFor(TemplateCostAnomalies)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = gen.Validate(GenerateInput{Format: FormatHTML})
+	if err == nil {
+		t.Fatal("expected error for zero targets")
 	}
 }
 

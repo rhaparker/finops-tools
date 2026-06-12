@@ -40,8 +40,9 @@ func GeneratorFor(name string) (Generator, error) {
 }
 
 var generators = map[string]Generator{
-	TemplateCosts:        costsGenerator{},
-	TemplateSavingsPlans: savingsPlansGenerator{},
+	TemplateCosts:         costsGenerator{},
+	TemplateSavingsPlans:  savingsPlansGenerator{},
+	TemplateCostAnomalies: costAnomaliesGenerator{},
 }
 
 func validateTemplateFormat(templateName, format string) error {
