@@ -1,4 +1,4 @@
-// account_list_tags.go implements "finops account list-tags" to list AWS Organizations tags for one account.
+// tag_list.go implements "finops tag list" to list AWS Organizations tags for one account.
 package cmd
 
 import (
@@ -13,24 +13,24 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var accountTagsCmd = &cobra.Command{
-	Use:   "list-tags",
+var tagListCmd = &cobra.Command{
+	Use:   "list",
 	Short: "List AWS Organizations tags for an account",
 	Long: `List all AWS Organizations tags for an account.
 
 Pass either --account-alias or --account-id.
 
 Examples:
-  finops account list-tags --account-alias rh-control
-  finops account list-tags --account-alias osd-tenant-1 --format json
-  finops account list-tags --account-id 123456789012 --format csv
-  finops account list-tags --account-id 111111111111 --payer rh-control`,
+  finops tag list --account-alias rh-control
+  finops tag list --account-alias osd-tenant-1 --format json
+  finops tag list --account-id 123456789012 --format csv
+  finops tag list --account-id 111111111111 --payer rh-control`,
 	Args: cobra.NoArgs,
 	PreRunE: func(_ *cobra.Command, _ []string) error {
 		_, err := output.ParseFormat(accountTagsFormat)
 		return err
 	},
-	RunE: runAccountTags,
+	RunE: runTagList,
 }
 
 var (
@@ -38,6 +38,7 @@ var (
 	accountTagsLoadConfigForCreds = loadAWSConfigForCredentialsAccount
 	accountTagsFetch              = coreaccount.ListTags
 	accountTagsFormat             string
+	accountTagsOutput             string
 	accountTagsPayer              string
 	accountTagsAlias              string
 	accountTagsAccountID          string
@@ -50,15 +51,18 @@ type accountTagsTarget struct {
 }
 
 func init() {
-	accountCmd.AddCommand(accountTagsCmd)
-	accountTagsCmd.Flags().StringVar(&accountTagsFormat, "format", string(output.FormatPrettyPrint),
+	tagCmd.AddCommand(tagListCmd)
+	tagListCmd.Flags().StringVar(&accountTagsFormat, "format", string(output.FormatPrettyPrint),
 		"Output format: pretty-print, json, csv")
-	accountTagsCmd.Flags().StringVar(&accountTagsPayer, "payer", "", "Registered payer alias to use for credentials when listing account tags")
-	accountTagsCmd.Flags().StringVar(&accountTagsAlias, "account-alias", "", "Registered account alias")
-	accountTagsCmd.Flags().StringVar(&accountTagsAccountID, "account-id", "", "12-digit AWS account ID")
+	addOutputFlag(tagListCmd, &accountTagsOutput)
+	bindAWSAccountSelectorFlags(tagListCmd, awsAccountSelectorFlagRefs{
+		Payer:     &accountTagsPayer,
+		Alias:     &accountTagsAlias,
+		AccountID: &accountTagsAccountID,
+	}, "Registered payer alias to use for credentials when listing account tags")
 }
 
-func runAccountTags(cmd *cobra.Command, args []string) error {
+func runTagList(cmd *cobra.Command, args []string) error {
 	format, err := output.ParseFormat(accountTagsFormat)
 	if err != nil {
 		return err
@@ -101,15 +105,16 @@ func runAccountTags(cmd *cobra.Command, args []string) error {
 	}
 	ensureOpts.AccountName = target.CredentialsAccountID
 	ensureOpts.ProfileNames = profiles
-	if _, err := accountTagsEnsureCredentials(cmd.Context(), ensureOpts); err != nil {
+	awsCtx := awsCommandContext(cmd)
+	if _, err := accountTagsEnsureCredentials(awsCtx, ensureOpts); err != nil {
 		return fmt.Errorf("%s: %w", target.CredentialsAccountID, mapCredentialError(target.CredentialsAccountID, err))
 	}
 
-	awsCfg, err := accountTagsLoadConfigForCreds(cmd.Context(), cfg, target.CredentialsAccountID, awsFlags.CredentialsFile)
+	awsCfg, err := accountTagsLoadConfigForCreds(awsCtx, cfg, target.CredentialsAccountID, awsFlags.CredentialsFile)
 	if err != nil {
 		return err
 	}
-	tags, err := accountTagsFetch(cmd.Context(), awsCfg, target.AccountID)
+	tags, err := accountTagsFetch(awsCtx, awsCfg, target.AccountID)
 	if err != nil {
 		return fmt.Errorf("list tags for account %s: %w", target.AccountID, err)
 	}
@@ -121,7 +126,14 @@ func runAccountTags(cmd *cobra.Command, args []string) error {
 			Value: tag.Value,
 		}
 	}
-	return output.WriteAWSAccountTagsResult(cmd.OutOrStdout(), format, output.AccountTagsView{
+	out, closeOut, err := resolveCommandOutput(cmd, accountTagsOutput)
+	if err != nil {
+		return err
+	}
+	if closeOut != nil {
+		defer closeOut()
+	}
+	return output.WriteAWSAccountTagsResult(out, format, output.AccountTagsView{
 		AccountID: target.AccountID,
 		Alias:     target.Alias,
 		Tags:      rows,

@@ -1,4 +1,4 @@
-// account_add_tag.go implements "finops account add-tag" for AWS Organizations account tags.
+// tag_add.go implements "finops tag add" for AWS Organizations account tags.
 package cmd
 
 import (
@@ -12,8 +12,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var accountAddTagCmd = &cobra.Command{
-	Use:   "add-tag",
+var tagAddCmd = &cobra.Command{
+	Use:   "add",
 	Short: "Add an AWS Organizations tag to an account",
 	Long: `Add one AWS Organizations tag to an account.
 
@@ -23,11 +23,11 @@ By default, the command fails when the tag key already exists.
 Use --force to overwrite an existing tag value.
 
 Examples:
-  finops account add-tag --account-alias rh-control --tag-key owner --tag-value team-a
-  finops account add-tag --account-alias osd-tenant-1 --tag-key env --tag-value prod --force
-  finops account add-tag --account-id 111111111111 --tag-key env --tag-value prod --payer rh-control`,
+  finops tag add --account-alias rh-control --tag-key owner --tag-value team-a
+  finops tag add --account-alias osd-tenant-1 --tag-key env --tag-value prod --force
+  finops tag add --account-id 111111111111 --tag-key env --tag-value prod --payer rh-control`,
 	Args: cobra.NoArgs,
-	RunE: runAccountAddTag,
+	RunE: runTagAdd,
 }
 
 var (
@@ -45,16 +45,18 @@ var (
 )
 
 func init() {
-	accountCmd.AddCommand(accountAddTagCmd)
-	accountAddTagCmd.Flags().StringVar(&accountAddTagKey, "tag-key", "", "Tag key")
-	accountAddTagCmd.Flags().StringVar(&accountAddTagValue, "tag-value", "", "Tag value")
-	accountAddTagCmd.Flags().BoolVar(&accountAddTagForce, "force", false, "Overwrite existing value when the tag key already exists")
-	accountAddTagCmd.Flags().StringVar(&accountAddTagPayer, "payer", "", "Registered payer alias to use for credentials when mutating account tags")
-	accountAddTagCmd.Flags().StringVar(&accountAddTagAlias, "account-alias", "", "Registered account alias")
-	accountAddTagCmd.Flags().StringVar(&accountAddTagAccountID, "account-id", "", "12-digit AWS account ID")
+	tagCmd.AddCommand(tagAddCmd)
+	tagAddCmd.Flags().StringVar(&accountAddTagKey, "tag-key", "", "Tag key")
+	tagAddCmd.Flags().StringVar(&accountAddTagValue, "tag-value", "", "Tag value")
+	tagAddCmd.Flags().BoolVar(&accountAddTagForce, "force", false, "Overwrite existing value when the tag key already exists")
+	bindAWSAccountSelectorFlags(tagAddCmd, awsAccountSelectorFlagRefs{
+		Payer:     &accountAddTagPayer,
+		Alias:     &accountAddTagAlias,
+		AccountID: &accountAddTagAccountID,
+	}, "Registered payer alias to use for credentials when mutating account tags")
 }
 
-func runAccountAddTag(cmd *cobra.Command, args []string) error {
+func runTagAdd(cmd *cobra.Command, args []string) error {
 	tagKey := strings.TrimSpace(accountAddTagKey)
 	if tagKey == "" {
 		return fmt.Errorf("tag key is required (--tag-key)")
@@ -101,15 +103,16 @@ func runAccountAddTag(cmd *cobra.Command, args []string) error {
 	}
 	ensureOpts.AccountName = target.CredentialsAccountID
 	ensureOpts.ProfileNames = profiles
-	if _, err := accountAddTagEnsureCredentialsFn(cmd.Context(), ensureOpts); err != nil {
+	awsCtx := awsCommandContext(cmd)
+	if _, err := accountAddTagEnsureCredentialsFn(awsCtx, ensureOpts); err != nil {
 		return fmt.Errorf("%s: %w", target.CredentialsAccountID, mapCredentialError(target.CredentialsAccountID, err))
 	}
 
-	awsCfg, err := accountAddTagLoadConfigFn(cmd.Context(), cfg, target.CredentialsAccountID, awsFlags.CredentialsFile)
+	awsCfg, err := accountAddTagLoadConfigFn(awsCtx, cfg, target.CredentialsAccountID, awsFlags.CredentialsFile)
 	if err != nil {
 		return err
 	}
-	kind, err := accountAddTagDetectKindFn(cmd.Context(), awsCfg, target.CredentialsAccountID)
+	kind, err := accountAddTagDetectKindFn(awsCtx, awsCfg, target.CredentialsAccountID)
 	if err != nil {
 		return fmt.Errorf("account tag mutations require payer credentials; unable to verify account %s is a payer: %w", target.CredentialsAccountID, err)
 	}
@@ -117,14 +120,14 @@ func runAccountAddTag(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("account tag mutations require payer credentials; account %s is %s (use --payer <payer-alias>)", target.CredentialsAccountID, kind)
 	}
 
-	tags, err := accountAddTagListTagsFn(cmd.Context(), awsCfg, target.AccountID)
+	tags, err := accountAddTagListTagsFn(awsCtx, awsCfg, target.AccountID)
 	if err != nil {
 		return fmt.Errorf("list tags for account %s: %w", target.AccountID, err)
 	}
 	if accountHasTagKey(tags, tagKey) && !accountAddTagForce {
 		return fmt.Errorf("tag %q already exists on account %s (use --force to overwrite)", tagKey, target.AccountID)
 	}
-	if err := accountAddTagSetAccountTagFn(cmd.Context(), awsCfg, target.AccountID, tagKey, tagValue); err != nil {
+	if err := accountAddTagSetAccountTagFn(awsCtx, awsCfg, target.AccountID, tagKey, tagValue); err != nil {
 		return fmt.Errorf("add tag %q on account %s: %w", tagKey, target.AccountID, err)
 	}
 
